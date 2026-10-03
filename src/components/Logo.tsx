@@ -31,6 +31,13 @@ export const Logo: React.FC<LogoProps> = ({
     xl: 'text-[16px] tracking-[0.45em]',
   };
 
+  const meloTextSizes = {
+    sm: 'text-[11px]',
+    md: 'text-[15px]',
+    lg: 'text-[20px]',
+    xl: 'text-[28px]',
+  };
+
   const handleMouseEnter = () => {
     if (!interactive) return;
     // Sequential piano key ripple on hover
@@ -52,23 +59,23 @@ export const Logo: React.FC<LogoProps> = ({
     >
       {/* Outer rounded badge matching reference image */}
       <div
-        className={`${badgeHeights[size]} aspect-[2.4/1] bg-[#16181d] group-hover:bg-[#1f232b] border border-white/10 group-hover:border-[#c5a880]/60 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2.5 shadow-md shadow-black/40 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_8px_20px_rgba(197,168,128,0.15)]`}
+        className={`${badgeHeights[size]} bg-[#23272d] group-hover:bg-[#2c313a] border border-white/10 group-hover:border-[#c5a880]/60 rounded-xl px-2.5 sm:px-3.5 py-1.5 flex items-center justify-center gap-1.5 sm:gap-2 shadow-md shadow-black/40 transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_8px_20px_rgba(197,168,128,0.15)]`}
       >
         {/* Left side: Stylized Piano Keys SVG with hover ripple */}
-        <div className="h-full aspect-[1/1] relative flex items-center justify-center">
+        <div className="h-full aspect-[0.92/1] relative flex items-center justify-center">
           <svg
-            viewBox="0 0 100 100"
+            viewBox="0 0 94 100"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             className="h-full w-auto"
           >
             {/* White keys */}
             <rect
-              x="5"
-              y="10"
-              width="18"
-              height="80"
-              rx="4"
+              x="3"
+              y="8"
+              width="19"
+              height="84"
+              rx="3.5"
               fill={activeKey === 0 ? '#f4efe6' : '#F8F9FA'}
               className="transition-all duration-150 origin-top"
               style={{
@@ -77,11 +84,11 @@ export const Logo: React.FC<LogoProps> = ({
               }}
             />
             <rect
-              x="29"
-              y="10"
-              width="18"
-              height="80"
-              rx="4"
+              x="26"
+              y="8"
+              width="19"
+              height="84"
+              rx="3.5"
               fill={activeKey === 1 ? '#f4efe6' : '#F8F9FA'}
               className="transition-all duration-150 origin-top"
               style={{
@@ -90,11 +97,11 @@ export const Logo: React.FC<LogoProps> = ({
               }}
             />
             <rect
-              x="53"
-              y="10"
-              width="18"
-              height="80"
-              rx="4"
+              x="49"
+              y="8"
+              width="19"
+              height="84"
+              rx="3.5"
               fill={activeKey === 2 ? '#f4efe6' : '#F8F9FA'}
               className="transition-all duration-150 origin-top"
               style={{
@@ -103,11 +110,11 @@ export const Logo: React.FC<LogoProps> = ({
               }}
             />
             <rect
-              x="77"
-              y="10"
-              width="18"
-              height="80"
-              rx="4"
+              x="72"
+              y="8"
+              width="19"
+              height="84"
+              rx="3.5"
               fill={activeKey === 3 ? '#f4efe6' : '#F8F9FA'}
               className="transition-all duration-150 origin-top"
               style={{
@@ -117,18 +124,18 @@ export const Logo: React.FC<LogoProps> = ({
             />
 
             {/* Black keys */}
-            <rect x="18" y="10" width="14" height="48" rx="3" fill="#16181d" stroke="#252932" strokeWidth="0.8" />
-            <rect x="42" y="10" width="14" height="48" rx="3" fill="#16181d" stroke="#252932" strokeWidth="0.8" />
-            <rect x="66" y="10" width="14" height="48" rx="3" fill="#16181d" stroke="#252932" strokeWidth="0.8" />
+            <rect x="15.5" y="8" width="13.5" height="50" rx="2.5" fill="#23272d" stroke="#17191d" strokeWidth="0.8" />
+            <rect x="38.5" y="8" width="13.5" height="50" rx="2.5" fill="#23272d" stroke="#17191d" strokeWidth="0.8" />
+            <rect x="61.5" y="8" width="13.5" height="50" rx="2.5" fill="#23272d" stroke="#17191d" strokeWidth="0.8" />
           </svg>
         </div>
 
-        {/* Right side: MELO PHILE text */}
-        <div className="flex flex-col justify-center leading-none text-left">
-          <span className="text-white font-extrabold tracking-wider text-[1.1em] font-sans">
+        {/* Right side: MELO PHILE text with exact snug spacing */}
+        <div className="flex flex-col justify-center leading-[0.88] text-left">
+          <span className={`text-white font-black tracking-tight font-sans ${meloTextSizes[size]}`}>
             MELO
           </span>
-          <span className="text-white font-extrabold tracking-wider text-[1.1em] font-sans">
+          <span className={`text-white font-black tracking-tight font-sans ${meloTextSizes[size]}`}>
             PHILE
           </span>
         </div>

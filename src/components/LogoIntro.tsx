@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { soundEngine } from '../utils/audioSynth';
-import { Volume2, VolumeX, Sparkles, ChevronRight } from 'lucide-react';
+import { Volume2, VolumeX, ChevronRight } from 'lucide-react';
 
 interface LogoIntroProps {
   onComplete: () => void;
@@ -144,9 +144,9 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
 
       {/* Central Animated Logo Composition */}
       <div className="relative z-10 flex flex-col items-center">
-        {/* Outer Rounded Charcoal Badge */}
+        {/* Outer Rounded Charcoal Badge with exact compact proportions */}
         <div
-          className={`relative h-28 sm:h-36 aspect-[2.4/1] bg-[#1a1e24] border border-white/15 rounded-2xl sm:rounded-3xl p-3 sm:p-4 flex items-center justify-between gap-4 sm:gap-6 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] transition-all duration-700 ${
+          className={`relative h-28 sm:h-36 bg-[#23272d] border border-white/15 rounded-2xl sm:rounded-3xl px-5 sm:px-7 py-3.5 sm:py-5 flex items-center justify-center gap-3 sm:gap-4 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] transition-all duration-700 ${
             stage >= 1
               ? 'opacity-100 scale-100 translate-y-0 ring-1 ring-[#c5a880]/30'
               : 'opacity-0 scale-90 translate-y-6'
@@ -156,20 +156,20 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
           <div className="absolute inset-0 rounded-2xl sm:rounded-3xl bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
 
           {/* Left Side: Animated Piano Keys SVG */}
-          <div className="h-full aspect-[1/1] relative flex items-center justify-center">
+          <div className="h-full aspect-[0.92/1] relative flex items-center justify-center">
             <svg
-              viewBox="0 0 100 100"
+              viewBox="0 0 94 100"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
               className="h-full w-auto drop-shadow-md"
             >
               {/* White Key 1 (C) */}
               <rect
-                x="5"
-                y="10"
-                width="18"
-                height="80"
-                rx="4"
+                x="3"
+                y="8"
+                width="19"
+                height="84"
+                rx="3.5"
                 fill={activeKey === 0 ? '#f4efe6' : '#F8F9FA'}
                 className="transition-all duration-150 origin-top"
                 style={{
@@ -185,11 +185,11 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
               />
               {/* White Key 2 (E) */}
               <rect
-                x="29"
-                y="10"
-                width="18"
-                height="80"
-                rx="4"
+                x="26"
+                y="8"
+                width="19"
+                height="84"
+                rx="3.5"
                 fill={activeKey === 1 ? '#f4efe6' : '#F8F9FA'}
                 className="transition-all duration-150 origin-top"
                 style={{
@@ -205,11 +205,11 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
               />
               {/* White Key 3 (G) */}
               <rect
-                x="53"
-                y="10"
-                width="18"
-                height="80"
-                rx="4"
+                x="49"
+                y="8"
+                width="19"
+                height="84"
+                rx="3.5"
                 fill={activeKey === 2 ? '#f4efe6' : '#F8F9FA'}
                 className="transition-all duration-150 origin-top"
                 style={{
@@ -225,11 +225,11 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
               />
               {/* White Key 4 (B) */}
               <rect
-                x="77"
-                y="10"
-                width="18"
-                height="80"
-                rx="4"
+                x="72"
+                y="8"
+                width="19"
+                height="84"
+                rx="3.5"
                 fill={activeKey === 3 ? '#f4efe6' : '#F8F9FA'}
                 className="transition-all duration-150 origin-top"
                 style={{
@@ -246,54 +246,54 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
 
               {/* Black keys */}
               <rect
-                x="18"
-                y="10"
-                width="14"
-                height="48"
-                rx="3"
-                fill="#1a1e24"
-                stroke="#2a303a"
-                strokeWidth="1"
+                x="15.5"
+                y="8"
+                width="13.5"
+                height="50"
+                rx="2.5"
+                fill="#23272d"
+                stroke="#17191d"
+                strokeWidth="0.8"
               />
               <rect
-                x="42"
-                y="10"
-                width="14"
-                height="48"
-                rx="3"
-                fill="#1a1e24"
-                stroke="#2a303a"
-                strokeWidth="1"
+                x="38.5"
+                y="8"
+                width="13.5"
+                height="50"
+                rx="2.5"
+                fill="#23272d"
+                stroke="#17191d"
+                strokeWidth="0.8"
               />
               <rect
-                x="66"
-                y="10"
-                width="14"
-                height="48"
-                rx="3"
-                fill="#1a1e24"
-                stroke="#2a303a"
-                strokeWidth="1"
+                x="61.5"
+                y="8"
+                width="13.5"
+                height="50"
+                rx="2.5"
+                fill="#23272d"
+                stroke="#17191d"
+                strokeWidth="0.8"
               />
             </svg>
           </div>
 
-          {/* Right Side: Animated MELO PHILE Typography */}
-          <div className="flex flex-col justify-center leading-[0.88] text-left pr-2 sm:pr-4 overflow-hidden">
+          {/* Right Side: Animated MELO PHILE Typography - Snug, authentic spacing */}
+          <div className="flex flex-col justify-center leading-[0.88] text-left overflow-hidden">
             <span
-              className={`text-white font-extrabold tracking-wider text-2xl sm:text-4xl font-sans transition-all duration-700 ${
+              className={`text-white font-black tracking-tight text-3xl sm:text-5xl font-sans transition-all duration-700 ${
                 stage >= 3
                   ? 'opacity-100 translate-x-0'
-                  : 'opacity-0 translate-x-6'
+                  : 'opacity-0 translate-x-4'
               }`}
             >
               MELO
             </span>
             <span
-              className={`text-white font-extrabold tracking-wider text-2xl sm:text-4xl font-sans transition-all duration-700 delay-100 ${
+              className={`text-white font-black tracking-tight text-3xl sm:text-5xl font-sans transition-all duration-700 delay-100 ${
                 stage >= 3
                   ? 'opacity-100 translate-x-0'
-                  : 'opacity-0 translate-x-6'
+                  : 'opacity-0 translate-x-4'
               }`}
             >
               PHILE
