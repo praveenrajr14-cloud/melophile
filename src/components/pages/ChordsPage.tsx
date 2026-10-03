@@ -649,8 +649,8 @@ export const ChordsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. CHORD VISUALIZER & PIANO KEYBOARD VIEWER (STICKY HEAD) */}
-      <div className="sticky top-20 z-30 mb-14 bg-white/95 backdrop-blur-md rounded-3xl border border-[#eae6de] p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
+      {/* 2. CHORD VISUALIZER & PIANO KEYBOARD VIEWER */}
+      <div className="relative mb-14 bg-white/95 backdrop-blur-md rounded-3xl border border-[#eae6de] p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Chord metadata display (5 cols) */}
           <div className="lg:col-span-5 space-y-2">
