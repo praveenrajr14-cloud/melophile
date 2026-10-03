@@ -342,21 +342,21 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             {
-              name: 'Aditi Varma',
+              name: 'Anuraga',
               role: 'Advanced Piano Student',
               quote:
                 'Praveen sir made complex classical dynamics and sight-reading effortless. His patience and ear for micro-tonality transformed how I understand music.',
               rating: 5,
             },
             {
-              name: 'Karthik Menon',
+              name: 'Toby Cristo',
               role: 'Independent Film Music Composer',
               quote:
                 'I joined Melophile for keyboard harmony and production. Within a year, my chord voicing and modulation skills leapt to professional cinematic quality.',
               rating: 5,
             },
             {
-              name: 'Dr. Shalini Rao',
+              name: 'Brycen',
               role: 'Adult Piano Learner & Parent',
               quote:
                 'Both my 10-year-old son and I take lessons at Melophile. Praveen sir creates an encouraging, pressure-free yet disciplined environment where true love for music flourishes.',

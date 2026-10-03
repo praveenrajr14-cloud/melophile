@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { soundEngine } from '../../utils/audioSynth';
 import { CircleOfFifths } from '../chords/CircleOfFifths';
-import { FullTriadsList } from '../chords/FullTriadsList';
+import { FullTriadsList, ALL_TRIADS, TriadItem } from '../chords/FullTriadsList';
+import { TriadInspectorModal } from '../chords/TriadInspectorModal';
 import {
   Play,
   Volume2,
@@ -73,6 +74,8 @@ export const ChordsPage: React.FC = () => {
 
   const [activeProgressionId, setActiveProgressionId] = useState<string | null>(null);
   const [progressionStep, setProgressionStep] = useState<number>(-1);
+  const [popupTriad, setPopupTriad] = useState<TriadItem | null>(null);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
 
   // Topics definition (3 free, subscription paywall, 3 advanced)
   const topics: Topic[] = [
@@ -523,11 +526,23 @@ export const ChordsPage: React.FC = () => {
     return activeNotes.some((n) => normalizePitch(n) === normKey);
   };
 
-  // Play single chord
+  // Play single chord & show inspector popup if it's a triad
   const handlePlayChord = (chord: ChordItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     soundEngine.playChord(chord.notes, 1.8, true);
     setSelectedChord(chord);
+
+    // If it's a triad, show popup inspector modal
+    const matchedTriad = ALL_TRIADS.find(
+      (t) =>
+        t.name.toLowerCase() === chord.name.toLowerCase() ||
+        t.symbol.toLowerCase() === chord.symbol.toLowerCase() ||
+        t.id === chord.id
+    );
+    if (matchedTriad) {
+      setPopupTriad(matchedTriad);
+      setIsPopupOpen(true);
+    }
   };
 
   // Play progression loop
@@ -1435,6 +1450,13 @@ export const ChordsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Active Voicing Inspector Popup Modal for Triads */}
+      <TriadInspectorModal
+        isOpen={isPopupOpen}
+        onClose={() => setIsPopupOpen(false)}
+        triad={popupTriad}
+      />
     </div>
   );
 };

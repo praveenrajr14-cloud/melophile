@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { soundEngine } from '../../utils/audioSynth';
+import { TriadInspectorModal } from './TriadInspectorModal';
 import {
   Volume2,
   Play,
@@ -441,6 +442,8 @@ export const FullTriadsList: React.FC<FullTriadsListProps> = ({
   const [sortBy, setSortBy] = useState<'fifths' | 'chromatic'>('fifths');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [inspectingTriad, setInspectingTriad] = useState<TriadItem | null>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
 
   // Filter & Sort Logic
   const filteredTriads = useMemo(() => {
@@ -470,6 +473,8 @@ export const FullTriadsList: React.FC<FullTriadsListProps> = ({
     if (e) e.stopPropagation();
     soundEngine.playChord(triad.notes, 1.6, true);
     onSelectChord(triad);
+    setInspectingTriad(triad);
+    setIsInspectorOpen(true);
   };
 
   return (
@@ -687,9 +692,10 @@ export const FullTriadsList: React.FC<FullTriadsListProps> = ({
                           type="button"
                           onClick={(e) => handlePlay(triad, e)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#141518] hover:bg-[#2b2d35] text-white text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 group-hover:scale-105"
+                          title="Inspect and Audition Triad"
                         >
                           <Volume2 className="w-3.5 h-3.5 text-[#c5a880]" />
-                          <span>Audition</span>
+                          <span>Inspect & Audition</span>
                         </button>
                       </div>
                     </td>
@@ -764,7 +770,7 @@ export const FullTriadsList: React.FC<FullTriadsListProps> = ({
                     className="inline-flex items-center gap-1 text-xs font-semibold text-[#9e7a4b] hover:text-[#141518] transition-colors"
                   >
                     <Play className="w-3 h-3 fill-current" />
-                    <span>Play</span>
+                    <span>Inspect</span>
                   </button>
                 </div>
               </div>
@@ -785,6 +791,13 @@ export const FullTriadsList: React.FC<FullTriadsListProps> = ({
           </button>
         </div>
       )}
+
+      {/* Active Voicing Inspector Popup Modal for Triads */}
+      <TriadInspectorModal
+        isOpen={isInspectorOpen}
+        onClose={() => setIsInspectorOpen(false)}
+        triad={inspectingTriad}
+      />
     </div>
   );
 };
