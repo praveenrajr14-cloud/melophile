@@ -1,5 +1,7 @@
 # 🎹 Melophile Music Academy
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/praveenrajr14-cloud/melophile)
+
 > **"The sound of love"** • Parassala | TVM  
 > Instructor: **Praveen Raj R** (10+ Years Experience) • 150+ Students Mentored
 
