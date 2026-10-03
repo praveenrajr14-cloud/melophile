@@ -4,6 +4,7 @@ import { soundEngine } from '../../utils/audioSynth';
 import { CircleOfFifths } from '../chords/CircleOfFifths';
 import { FullTriadsList, ALL_TRIADS, TriadItem } from '../chords/FullTriadsList';
 import { TriadInspectorModal } from '../chords/TriadInspectorModal';
+import { PIANO_KEYS_C4_TO_C6 } from '../../utils/chordInversions';
 import {
   Play,
   Volume2,
@@ -709,64 +710,116 @@ export const ChordsPage: React.FC = () => {
 
           {/* Mini Visual Piano Keys (7 cols) */}
           <div className="lg:col-span-7 flex flex-col items-center sm:items-end justify-center">
-            <div className="relative inline-flex bg-[#141518] p-2 rounded-xl border border-[#2b2d35] shadow-inner select-none">
-              {/* Felt strip */}
-              <div className="absolute top-1 left-2 right-2 h-1 bg-[#8b2626] rounded-xs pointer-events-none" />
+            <div className="w-full max-w-[480px] bg-[#18191c] p-2 rounded-2xl shadow-xl border border-[#2b2d35]">
+              {/* Crimson Felt Strip */}
+              <div className="h-1.5 w-full bg-[#8b2626] rounded-t-sm mb-1 opacity-90 shadow-xs" />
 
-              {/* White keys (C4 to B4 + C5 to G5) */}
-              {[
-                'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4',
-                'C5', 'D5', 'E5', 'F5', 'G5'
-              ].map((note) => {
-                const isPressed = isKeyActive(note, selectedChord.notes);
-                return (
-                  <button
-                    key={note}
-                    type="button"
-                    onClick={() => soundEngine.playChord([note], 1.2, false)}
-                    className={`relative w-6 sm:w-8 h-24 sm:h-28 rounded-b border-x border-b border-black/20 transition-all duration-75 cursor-pointer origin-top flex flex-col justify-end items-center pb-1.5 group ${
-                      isPressed
-                        ? 'bg-[#9e7a4b] text-white shadow-sm ring-1 ring-[#c5a880]'
-                        : 'bg-white hover:bg-[#faf8f5] text-stone-700'
-                    }`}
-                  >
-                    <span className={`text-[9px] font-mono ${isPressed ? 'font-bold text-white' : 'text-stone-400'}`}>
-                      {note}
-                    </span>
-                  </button>
-                );
-              })}
+              <svg
+                viewBox="0 0 480 126"
+                className="w-full h-auto select-none block overflow-visible"
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  <linearGradient id="pageActiveWhiteGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#c5a880" />
+                    <stop offset="100%" stopColor="#9e7a4b" />
+                  </linearGradient>
+                  <linearGradient id="pageActiveBlackGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#dfbe90" />
+                    <stop offset="100%" stopColor="#a37c48" />
+                  </linearGradient>
+                  <linearGradient id="pageWhiteKeyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="85%" stopColor="#fbf9f6" />
+                    <stop offset="100%" stopColor="#ede6db" />
+                  </linearGradient>
+                  <linearGradient id="pageBlackKeyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#2c3038" />
+                    <stop offset="15%" stopColor="#181a1f" />
+                    <stop offset="100%" stopColor="#0c0d10" />
+                  </linearGradient>
+                </defs>
 
-              {/* Black keys overlaid */}
-              {[
-                { note: 'C#4', left: 1.1 },
-                { note: 'D#4', left: 3.1 },
-                { note: 'F#4', left: 7.1 },
-                { note: 'G#4', left: 9.1 },
-                { note: 'A#4', left: 11.1 },
-                { note: 'C#5', left: 15.1 },
-                { note: 'D#5', left: 17.1 },
-                { note: 'F#5', left: 21.1 },
-              ].map((bk) => {
-                const isPressed = isKeyActive(bk.note, selectedChord.notes);
-                return (
-                  <button
-                    key={bk.note}
-                    type="button"
-                    onClick={() => soundEngine.playChord([bk.note], 1.2, false)}
-                    style={{ left: `calc(${bk.left} * 1rem)` }}
-                    className={`absolute top-2 w-4 sm:w-5 h-16 sm:h-18 rounded-b-xs z-10 transition-all duration-75 cursor-pointer flex flex-col justify-end items-center pb-1 ${
-                      isPressed
-                        ? 'bg-[#c5a880] text-[#0b0c0e] ring-2 ring-[#c5a880]'
-                        : 'bg-[#181a20] hover:bg-[#252830] text-white/70'
-                    }`}
-                  >
-                    <span className="text-[7px] font-mono leading-none">
-                      {bk.note.replace('4', '').replace('5', '')}
-                    </span>
-                  </button>
-                );
-              })}
+                {/* White keys (15 keys: C4 to C6) */}
+                <g id="page-white-keys">
+                  {PIANO_KEYS_C4_TO_C6.filter((k) => !k.isBlack).map((key) => {
+                    const isPressed = isKeyActive(key.note, selectedChord.notes);
+                    return (
+                      <g
+                        key={key.note}
+                        onClick={() => soundEngine.playChord([key.note], 1.2, false)}
+                        className="cursor-pointer group"
+                      >
+                        <title>{`Note ${key.note} (Click to audition)`}</title>
+                        <rect
+                          x={key.x}
+                          y={2}
+                          width={key.width - 1}
+                          height={key.height}
+                          rx={3}
+                          ry={3}
+                          fill={isPressed ? 'url(#pageActiveWhiteGrad)' : 'url(#pageWhiteKeyGrad)'}
+                          stroke={isPressed ? '#856338' : '#c8c2b7'}
+                          strokeWidth={1}
+                          className="transition-colors duration-100 group-hover:brightness-95"
+                        />
+                        <text
+                          x={key.x + key.width / 2 - 0.5}
+                          y={key.height - 10}
+                          textAnchor="middle"
+                          fontSize="9"
+                          fontFamily="ui-monospace, monospace"
+                          fontWeight={isPressed ? '700' : '500'}
+                          fill={isPressed ? '#ffffff' : '#737785'}
+                          className="pointer-events-none select-none"
+                        >
+                          {key.note.replace('4', '').replace('5', '').replace('6', '')}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </g>
+
+                {/* Black keys (10 keys: C#4 to A#5) */}
+                <g id="page-black-keys">
+                  {PIANO_KEYS_C4_TO_C6.filter((k) => k.isBlack).map((key) => {
+                    const isPressed = isKeyActive(key.note, selectedChord.notes);
+                    return (
+                      <g
+                        key={key.note}
+                        onClick={() => soundEngine.playChord([key.note], 1.2, false)}
+                        className="cursor-pointer group"
+                      >
+                        <title>{`Note ${key.note} (Click to audition)`}</title>
+                        <rect
+                          x={key.x}
+                          y={2}
+                          width={key.width}
+                          height={key.height}
+                          rx={2.5}
+                          ry={2.5}
+                          fill={isPressed ? 'url(#pageActiveBlackGrad)' : 'url(#pageBlackKeyGrad)'}
+                          stroke={isPressed ? '#ffffff' : '#333742'}
+                          strokeWidth={isPressed ? 1.2 : 0.8}
+                          className="transition-all duration-100 group-hover:brightness-125"
+                        />
+                        <text
+                          x={key.x + key.width / 2}
+                          y={key.height - 7}
+                          textAnchor="middle"
+                          fontSize="7"
+                          fontFamily="ui-monospace, monospace"
+                          fontWeight={isPressed ? '700' : '400'}
+                          fill={isPressed ? '#ffffff' : '#b0b4bd'}
+                          className="pointer-events-none select-none"
+                        >
+                          {key.note.replace(/[0-9]/g, '')}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </g>
+              </svg>
             </div>
             <span className="text-[10px] text-[#5c5f6a] mt-1.5 font-medium">
               Highlighted keys denote active voicing tones
