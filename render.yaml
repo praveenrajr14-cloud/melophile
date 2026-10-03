@@ -4,6 +4,9 @@ services:
     runtime: static
     buildCommand: npm run build
     staticPublishPath: ./dist
+    domains:
+      - melophilemusic.com
+      - www.melophilemusic.com
     headers:
       - path: /*
         name: Cache-Control
