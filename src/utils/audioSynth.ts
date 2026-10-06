@@ -80,7 +80,10 @@ class SoundEngine {
   public playChord(noteNames: string[], duration: number = 1.8, arpeggiate: boolean = true) {
     if (!this.enabled || !noteNames.length) return;
     noteNames.forEach((note, idx) => {
-      const freq = NOTE_FREQUENCIES[note];
+      let freq = NOTE_FREQUENCIES[note];
+      if (!freq) {
+        freq = getNoteFrequency(note);
+      }
       if (freq) {
         const delay = arpeggiate ? idx * 35 : 0;
         if (delay === 0) {
@@ -118,8 +121,33 @@ class SoundEngine {
   }
 }
 
-
 export const soundEngine = new SoundEngine();
+
+const SEMITONE_MAP: Record<string, number> = {
+  'C': 0, 'B#': 0,
+  'C#': 1, 'Db': 1,
+  'D': 2,
+  'D#': 3, 'Eb': 3,
+  'E': 4, 'Fb': 4,
+  'F': 5, 'E#': 5,
+  'F#': 6, 'Gb': 6,
+  'G': 7,
+  'G#': 8, 'Ab': 8,
+  'A': 9,
+  'A#': 10, 'Bb': 10,
+  'B': 11, 'Cb': 11
+};
+
+export function getNoteFrequency(note: string): number {
+  if (NOTE_FREQUENCIES[note]) return NOTE_FREQUENCIES[note];
+  const m = note.match(/^([A-G][b#]?)([0-8])$/);
+  if (!m) return 440;
+  const name = m[1];
+  const oct = parseInt(m[2], 10);
+  const semi = SEMITONE_MAP[name] ?? 0;
+  const midi = (oct + 1) * 12 + semi;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
 
 // Standard chromatic scale frequencies with enharmonic equivalents
 export const NOTE_FREQUENCIES: Record<string, number> = {

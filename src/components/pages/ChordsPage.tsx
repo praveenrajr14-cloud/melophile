@@ -4,6 +4,7 @@ import { soundEngine } from '../../utils/audioSynth';
 import { CircleOfFifths } from '../chords/CircleOfFifths';
 import { FullTriadsList, ALL_TRIADS, TriadItem } from '../chords/FullTriadsList';
 import { TriadInspectorModal } from '../chords/TriadInspectorModal';
+import { ChordProgressionSession } from '../chords/ChordProgressionSession';
 import { PIANO_KEYS_C4_TO_C6 } from '../../utils/chordInversions';
 import {
   Play,
@@ -616,51 +617,34 @@ export const ChordsPage: React.FC = () => {
         </p>
 
         {/* Quick jump navigation */}
-        <div className="flex items-center justify-center gap-2 flex-wrap mt-8">
+        <div className="flex items-center justify-center gap-2.5 flex-wrap mt-8">
+          <a
+            href="#chord-progressions-session"
+            className="px-5 py-2 rounded-full text-xs font-bold bg-[#141518] text-[#c5a880] border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-md ring-2 ring-[#c5a880]/60 scale-105"
+          >
+            <Repeat className="w-3.5 h-3.5 text-[#c5a880]" />
+            <span>Progressions (All 12 Keys)</span>
+          </a>
           <a
             href="#circle-of-fifths"
-            className="px-4 py-1.5 rounded-full text-xs font-semibold bg-[#141518] text-[#c5a880] border border-[#141518] hover:bg-[#2b2d35] transition-colors flex items-center gap-1.5 shadow-xs"
+            className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f4efe6] text-[#8a6839] border border-[#e5dcce] hover:bg-[#ede5d8] transition-colors flex items-center gap-1.5 shadow-xs"
           >
-            <Sparkles className="w-3 h-3 text-[#c5a880]" />
+            <Sparkles className="w-3.5 h-3.5 text-[#9e7a4b]" />
             Circle of Fifths
           </a>
           <a
             href="#full-triads-list"
-            className="px-4 py-1.5 rounded-full text-xs font-semibold bg-[#f4efe6] text-[#8a6839] border border-[#e5dcce] hover:bg-[#ede5d8] transition-colors flex items-center gap-1.5 shadow-xs"
+            className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f4efe6] text-[#8a6839] border border-[#e5dcce] hover:bg-[#ede5d8] transition-colors flex items-center gap-1.5 shadow-xs"
           >
-            <Layers className="w-3 h-3 text-[#9e7a4b]" />
-            24 Triads (List-Wise)
-          </a>
-          <a
-            href="#topic-1"
-            className="px-4 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-[#ede8e0] border border-[#eae6de] text-[#5c5f6a] transition-colors"
-          >
-            Topic 1: Triads & Harmony
-          </a>
-          <a
-            href="#topic-2"
-            className="px-4 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-[#ede8e0] border border-[#eae6de] text-[#5c5f6a] transition-colors"
-          >
-            Topic 2: 7th Chords
-          </a>
-          <a
-            href="#topic-3"
-            className="px-4 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-[#ede8e0] border border-[#eae6de] text-[#5c5f6a] transition-colors"
-          >
-            Topic 3: Pop & Extensions
+            <Layers className="w-3.5 h-3.5 text-[#9e7a4b]" />
+            24 Triads &amp; Inversions
           </a>
           <a
             href="#subscription-section"
-            className="px-4 py-1.5 rounded-full text-xs font-semibold bg-[#141518] text-white flex items-center gap-1.5 shadow-xs"
+            className="px-4 py-2 rounded-full text-xs font-semibold bg-[#141518] text-white flex items-center gap-1.5 shadow-xs"
           >
-            <Crown className="w-3 h-3 text-[#c5a880]" />
+            <Crown className="w-3.5 h-3.5 text-[#c5a880]" />
             Pro Subscription
-          </a>
-          <a
-            href="#topic-4"
-            className="px-4 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-[#ede8e0] border border-[#eae6de] text-[#5c5f6a] transition-colors"
-          >
-            Topic 4-6: Pro Voicings
           </a>
         </div>
       </div>
@@ -828,12 +812,28 @@ export const ChordsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 2.5 INTERACTIVE CIRCLE OF FIFTHS */}
+      {/* 2.5 INTERACTIVE CHORD PROGRESSION SESSION (ALL 12 KEYS, BASIC TO ADVANCED) */}
+      <ChordProgressionSession
+        onSelectChord={(c) => setSelectedChord(c)}
+        isProUnlocked={isProUnlocked}
+        onOpenSubscription={() => setShowSubModal(true)}
+        onDemoUnlock={() => {
+          soundEngine.playClick(800);
+          setIsProUnlocked(true);
+          try {
+            confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+          } catch {
+            // Ignored
+          }
+        }}
+      />
+
+      {/* 2.6 INTERACTIVE CIRCLE OF FIFTHS */}
       <section id="circle-of-fifths" className="scroll-mt-36">
         <CircleOfFifths onSelectChord={(c) => setSelectedChord(c)} />
       </section>
 
-      {/* 2.6 FULL 24 MAJOR & MINOR TRIADS DIRECTORY (LIST-WISE) */}
+      {/* 2.7 FULL 24 MAJOR & MINOR TRIADS DIRECTORY (LIST-WISE) */}
       <section id="full-triads-list" className="scroll-mt-36">
         <FullTriadsList
           onSelectChord={(c) => setSelectedChord(c)}

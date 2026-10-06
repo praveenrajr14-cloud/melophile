@@ -13,7 +13,14 @@ import { LogoIntro } from './components/LogoIntro';
 export const App: React.FC = () => {
   const resolveTab = (hash: string) => {
     if (['home', 'about', 'courses', 'chords', 'contact'].includes(hash)) return hash;
-    if (hash.startsWith('circle') || hash.startsWith('full-triads') || hash.startsWith('topic') || hash === 'subscription-section') {
+    if (
+      hash.startsWith('circle') ||
+      hash.startsWith('full-triads') ||
+      hash.startsWith('chord') ||
+      hash.startsWith('progression') ||
+      hash.startsWith('topic') ||
+      hash === 'subscription-section'
+    ) {
       return 'chords';
     }
     return 'home';
