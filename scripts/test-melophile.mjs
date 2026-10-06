@@ -49,9 +49,13 @@ async function runTests() {
 
   // Skip the intro sequence if Skip button exists
   const skipBtn = page.locator('button:has-text("Skip")').first();
-  if (await skipBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await skipBtn.click();
-    console.log('  ℹ️ Skipped Intro splash');
+  try {
+    if (await skipBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await skipBtn.click({ timeout: 1500 }).catch(() => {});
+      console.log('  ℹ️ Skipped Intro splash');
+    }
+  } catch {
+    // Intro completed naturally
   }
 
   // Wait for main content to render
