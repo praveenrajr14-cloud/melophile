@@ -21,7 +21,7 @@ export const Hero: React.FC = () => {
 
   const handleCopyEmail = async () => {
     try {
-      await navigator.clipboard.writeText('hello@mainframe.co');
+      await navigator.clipboard.writeText('praveenrajr14@gmail.com');
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -108,7 +108,7 @@ export const Hero: React.FC = () => {
             <span>
               Reach us:{' '}
               <span className="underline underline-offset-1">
-                hello@mainframe.co
+                praveenrajr14@gmail.com
               </span>
             </span>
 

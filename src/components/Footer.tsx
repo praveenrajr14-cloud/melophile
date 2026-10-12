@@ -1,14 +1,16 @@
 import React from 'react';
 import { Logo } from './Logo';
 import { soundEngine } from '../utils/audioSynth';
+import { BACKEND_EMAIL } from '../utils/cloudBackend';
 import { InstagramIcon, WhatsAppIcon } from './SocialIcons';
-import { Mail, Phone, MapPin, Clock } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, Cloud } from 'lucide-react';
 
 interface FooterProps {
   onNavigate: (tab: string) => void;
+  onOpenCloudBackend?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenCloudBackend }) => {
   const instagramUrl = 'https://www.instagram.com/melophileacademy_?utm_source=qr&stkn=MWw5eXZxY2pqNzIwZQ==';
   const whatsappUrl = 'https://wa.me/917356146076?text=Hi%20Melophile%20Academy,%20I%20would%20like%20to%20inquire%20about%20music%20classes.';
 
@@ -142,18 +144,39 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </p>
               <p className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-[#9e7a4b] shrink-0" />
-                <span>contact@melophile.com</span>
+                <a
+                  href={`mailto:${BACKEND_EMAIL}`}
+                  className="hover:text-[#141518] transition-colors break-all"
+                >
+                  {BACKEND_EMAIL}
+                </a>
               </p>
             </div>
           </div>
         </div>
 
-        {/* Bottom copyright */}
+        {/* Bottom copyright & Cloud Backend trigger */}
         <div className="border-t border-[#e2ded5] pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-[#6b6e7b] gap-4">
           <p>© {new Date().getFullYear()} Melophile Music Academy — <em>The sound of love</em>. All rights reserved.</p>
-          <p className="flex items-center gap-1.5">
-            Mentorship by <strong className="text-[#141518]">Praveen Raj R</strong> (10+ Yrs Exp) • Parassala | TVM
-          </p>
+          <div className="flex items-center gap-4 flex-wrap justify-center">
+            <p className="flex items-center gap-1.5">
+              Mentorship by <strong className="text-[#141518]">Praveen Raj R</strong> (10+ Yrs Exp) • Parassala | TVM
+            </p>
+            {onOpenCloudBackend && (
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick(650);
+                  onOpenCloudBackend();
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-[#faf8f5] border border-[#ded9cf] text-[11px] font-medium text-[#141518] hover:border-[#9e7a4b] transition-colors cursor-pointer shadow-2xs"
+                title={`Open Cloud Storage Backend (${BACKEND_EMAIL})`}
+              >
+                <Cloud className="w-3.5 h-3.5 text-[#9e7a4b]" />
+                <span>Cloud Storage ({BACKEND_EMAIL})</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </footer>

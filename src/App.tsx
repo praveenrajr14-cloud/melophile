@@ -7,6 +7,7 @@ import { CoursesPage } from './components/pages/CoursesPage';
 import { ChordsPage } from './components/pages/ChordsPage';
 import { ContactPage } from './components/pages/ContactPage';
 import { BookingModal } from './components/BookingModal';
+import { CloudBackendModal } from './components/CloudBackendModal';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 import { LogoIntro } from './components/LogoIntro';
 
@@ -31,6 +32,9 @@ export const App: React.FC = () => {
     return resolveTab(hash);
   });
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.location.hash === '#cloud-backend';
+  });
   const [selectedCourse, setSelectedCourse] = useState<string>('Piano & Keyboard');
 
   // Animated Logo Splash state (runs on first load or manual replay)
@@ -62,6 +66,10 @@ export const App: React.FC = () => {
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
+      if (hash === 'cloud-backend') {
+        setIsCloudModalOpen(true);
+        return;
+      }
       setCurrentTabState(resolveTab(hash));
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -125,13 +133,22 @@ export const App: React.FC = () => {
       </main>
 
       {/* Academy Footer */}
-      <Footer onNavigate={setCurrentTab} />
+      <Footer
+        onNavigate={setCurrentTab}
+        onOpenCloudBackend={() => setIsCloudModalOpen(true)}
+      />
 
       {/* Booking Modal */}
       <BookingModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         selectedCourse={selectedCourse}
+      />
+
+      {/* Cloud Storage & Backend Console Modal (praveenrajr14@gmail.com) */}
+      <CloudBackendModal
+        isOpen={isCloudModalOpen}
+        onClose={() => setIsCloudModalOpen(false)}
       />
 
       {/* Floating WhatsApp Quick Contact Button */}

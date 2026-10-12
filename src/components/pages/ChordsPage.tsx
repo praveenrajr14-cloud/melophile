@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { soundEngine } from '../../utils/audioSynth';
+import { submitToCloudBackend, BACKEND_EMAIL } from '../../utils/cloudBackend';
 import { CircleOfFifths } from '../chords/CircleOfFifths';
 import { FullTriadsList, ALL_TRIADS, TriadItem } from '../chords/FullTriadsList';
 import { TriadInspectorModal } from '../chords/TriadInspectorModal';
@@ -21,6 +22,7 @@ import {
   Layers,
   Repeat,
   Info,
+  Cloud,
 } from 'lucide-react';
 
 interface ChordItem {
@@ -61,6 +63,11 @@ export const ChordsPage: React.FC = () => {
   const [showSubModal, setShowSubModal] = useState(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
   const [subSuccess, setSubSuccess] = useState(false);
+  const [subFormData, setSubFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+  });
 
   // Active playing state
   const [selectedChord, setSelectedChord] = useState<ChordItem>({
@@ -578,8 +585,8 @@ export const ChordsPage: React.FC = () => {
     });
   };
 
-  // Simulated Pro Subscription checkout
-  const handleCompleteSubscription = () => {
+  // Pro Subscription checkout synced to praveenrajr14@gmail.com Cloud Backend
+  const handleCompleteSubscription = async () => {
     soundEngine.playClick(900);
     try {
       confetti({
@@ -593,6 +600,16 @@ export const ChordsPage: React.FC = () => {
     }
     setSubSuccess(true);
     setIsProUnlocked(true);
+
+    await submitToCloudBackend({
+      type: 'PRO_SUBSCRIPTION',
+      name: subFormData.name.trim() || 'Melophile Pro Member',
+      email: subFormData.email.trim() || BACKEND_EMAIL,
+      phone: subFormData.phone.trim() || 'Pro Checkout',
+      plan: billingCycle === 'annual' ? 'Annual All-Access Pass' : 'Monthly Membership',
+      amount: billingCycle === 'annual' ? '₹7,999 / year' : '₹999 / month',
+      course: 'Melophile Pro Masterclass & Harmony Lab',
+    });
 
     setTimeout(() => {
       setShowSubModal(false);
@@ -1403,8 +1420,12 @@ export const ChordsPage: React.FC = () => {
                 <p className="text-xs text-[#5c5f6a] leading-relaxed max-w-xs mx-auto">
                   All advanced jazz voicings, modal interchange loops, and film score topics are now completely unlocked.
                 </p>
-                <div className="p-3 bg-[#f5f3ef] rounded-xl text-xs font-mono text-[#8a6839]">
-                  Subscription Status: Active • Annual Pass
+                <div className="p-3 bg-[#f5f3ef] rounded-xl text-xs font-mono text-[#8a6839] space-y-1">
+                  <div>Subscription Status: Active • {billingCycle === 'annual' ? 'Annual Pass' : 'Monthly Pass'}</div>
+                  <div className="text-emerald-700 flex items-center justify-center gap-1.5 pt-1">
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>Synced to {BACKEND_EMAIL} Cloud</span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1421,12 +1442,39 @@ export const ChordsPage: React.FC = () => {
                 <h3 className="text-2xl font-serif font-medium text-[#141518] mb-1">
                   Complete Your Subscription
                 </h3>
-                <p className="text-xs text-[#5c5f6a] mb-6">
+                <p className="text-xs text-[#5c5f6a] mb-5">
                   Unlimited harmonic library access, masterclass video reviews, and studio access.
                 </p>
 
+                {/* Subscriber Details for Cloud Backend */}
+                <div className="space-y-2.5 mb-5">
+                  <input
+                    type="text"
+                    value={subFormData.name}
+                    onChange={(e) => setSubFormData({ ...subFormData, name: e.target.value })}
+                    placeholder="Your Full Name (for Pro Member Certificate)"
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#fcfbfa] border border-[#dcd7ce] text-xs text-[#141518] placeholder-stone-400 focus:outline-none focus:border-[#9e7a4b]"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input
+                      type="email"
+                      value={subFormData.email}
+                      onChange={(e) => setSubFormData({ ...subFormData, email: e.target.value })}
+                      placeholder="Email Address"
+                      className="w-full px-3.5 py-2 rounded-xl bg-[#fcfbfa] border border-[#dcd7ce] text-xs text-[#141518] placeholder-stone-400 focus:outline-none focus:border-[#9e7a4b]"
+                    />
+                    <input
+                      type="tel"
+                      value={subFormData.phone}
+                      onChange={(e) => setSubFormData({ ...subFormData, phone: e.target.value })}
+                      placeholder="WhatsApp / Phone"
+                      className="w-full px-3.5 py-2 rounded-xl bg-[#fcfbfa] border border-[#dcd7ce] text-xs text-[#141518] placeholder-stone-400 focus:outline-none focus:border-[#9e7a4b]"
+                    />
+                  </div>
+                </div>
+
                 {/* Plan Selection */}
-                <div className="space-y-3 mb-6">
+                <div className="space-y-3 mb-5">
                   <div
                     onClick={() => setBillingCycle('annual')}
                     className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
@@ -1472,7 +1520,7 @@ export const ChordsPage: React.FC = () => {
                 </div>
 
                 {/* Guaranteed inclusions */}
-                <div className="space-y-2 mb-6 text-xs text-[#5c5f6a]">
+                <div className="space-y-2 mb-5 text-xs text-[#5c5f6a]">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-3.5 h-3.5 text-[#9e7a4b]" />
                     <span>Instant access to Topics 4, 5, and 6 audio playback</span>

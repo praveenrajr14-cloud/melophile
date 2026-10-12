@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { soundEngine } from '../../utils/audioSynth';
+import { submitToCloudBackend, BACKEND_EMAIL } from '../../utils/cloudBackend';
 import { InstagramIcon, WhatsAppIcon } from '../SocialIcons';
 import {
   Mail,
@@ -12,6 +13,7 @@ import {
   ChevronDown,
   CalendarCheck,
   MessageCircle,
+  Cloud,
 } from 'lucide-react';
 
 interface ContactPageProps {
@@ -34,9 +36,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [recordId, setRecordId] = useState<string>('');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     soundEngine.playClick(800);
 
@@ -52,6 +55,18 @@ export const ContactPage: React.FC<ContactPageProps> = ({
     }
 
     setSubmitted(true);
+
+    const res = await submitToCloudBackend({
+      type: 'CONTACT_INQUIRY',
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      course: formData.course,
+      level: formData.level,
+      mode: formData.mode,
+      message: formData.message,
+    });
+    setRecordId(res.record.id);
   };
 
   const faqs = [
@@ -176,13 +191,16 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs uppercase font-semibold text-[#8a6839]">
-                    Email
+                    Email & Cloud Backend
                   </h4>
-                  <p className="text-sm font-medium text-[#141518] mt-0.5">
-                    contact@melophile.com
-                  </p>
+                  <a
+                    href={`mailto:${BACKEND_EMAIL}`}
+                    className="block text-sm font-medium text-[#141518] hover:text-[#9e7a4b] transition-colors mt-0.5"
+                  >
+                    {BACKEND_EMAIL}
+                  </a>
                   <p className="text-xs text-[#5c5f6a]">
-                    Direct: praveen@melophile.com
+                    Direct Instructor & Cloud Storage Inbox
                   </p>
                 </div>
               </div>
@@ -234,18 +252,26 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                   <strong className="text-[#9e7a4b]">{formData.course}</strong> course.
                 </p>
                 <div className="p-4 rounded-xl bg-[#f5f3ef] border border-[#e2ded5] max-w-sm mx-auto text-left text-xs text-[#4a4d56] space-y-1 font-mono">
+                  {recordId && <div>• Cloud ID: {recordId}</div>}
                   <div>• Student: {formData.name}</div>
                   <div>• Instrument: {formData.course}</div>
                   <div>• Level: {formData.level}</div>
                   <div>• Mode: {formData.mode}</div>
                   <div>• Phone: {formData.phone}</div>
+                  <div className="pt-1.5 mt-1 border-t border-[#e2ded5] text-emerald-700 flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>Synced to {BACKEND_EMAIL} Cloud</span>
+                  </div>
                 </div>
                 <p className="text-xs text-[#9e7a4b] font-medium">
                   We will contact you via WhatsApp / Phone within 4 business hours to finalize your exact slot!
                 </p>
                 <button
                   type="button"
-                  onClick={() => setSubmitted(false)}
+                  onClick={() => {
+                    setSubmitted(false);
+                    setRecordId('');
+                  }}
                   className="px-6 py-2 rounded-full border border-[#eae6de] hover:border-[#141518] text-[#141518] text-xs font-medium cursor-pointer transition-colors"
                 >
                   Book Another Session

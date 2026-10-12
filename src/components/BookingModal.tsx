@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { soundEngine } from '../utils/audioSynth';
-import { X, Sparkles, Send, CheckCircle } from 'lucide-react';
+import { submitToCloudBackend, BACKEND_EMAIL } from '../utils/cloudBackend';
+import { X, Sparkles, Send, CheckCircle, Cloud } from 'lucide-react';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   });
 
   const [isSuccess, setIsSuccess] = useState(false);
+  const [recordId, setRecordId] = useState<string>('');
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -42,7 +44,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     soundEngine.playClick(850);
 
@@ -58,10 +60,23 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
 
     setIsSuccess(true);
+
+    const res = await submitToCloudBackend({
+      type: 'TRIAL_BOOKING',
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      course: formData.course,
+      level: formData.level,
+      mode: formData.mode,
+      message: formData.message,
+    });
+    setRecordId(res.record.id);
   };
 
   const handleClose = () => {
     setIsSuccess(false);
+    setRecordId('');
     onClose();
   };
 
@@ -95,10 +110,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               We look forward to welcoming you, <strong className="text-[#141518]">{formData.name}</strong>. Instructor Praveen Raj R will contact you to confirm the time slot.
             </p>
             <div className="p-3.5 bg-[#f5f3ef] border border-[#e2ded5] rounded-xl text-xs text-[#8a6839] text-left space-y-1.5 font-mono">
+              {recordId && <div>• Cloud Ref: {recordId}</div>}
               <div>• Course: {formData.course}</div>
               <div>• Mode: {formData.mode}</div>
               <div>• Instructor: Praveen Raj R (10+ Yrs Exp)</div>
               <div>• Location: Parassala | TVM (or Online HD)</div>
+              <div className="pt-1 border-t border-[#e2ded5] text-emerald-700 flex items-center gap-1.5">
+                <Cloud className="w-3.5 h-3.5" />
+                <span>Saved to Cloud ({BACKEND_EMAIL})</span>
+              </div>
             </div>
             <button
               type="button"
