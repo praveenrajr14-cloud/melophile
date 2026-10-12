@@ -203,36 +203,52 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* Piano Component */}
         <InteractivePiano3D />
 
-        {/* Chord Library Banner Card */}
-        <div className="mt-8 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-[#f4efe6] via-[#f9f6f0] to-[#f4efe6] border border-[#e5dcce] shadow-xs flex flex-col md:flex-row items-center justify-between gap-6">
+        {/* Chord Library & AI Transposer Banner Card */}
+        <div className="mt-8 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-[#f4efe6] via-[#f9f6f0] to-[#f4efe6] border border-[#e5dcce] shadow-xs flex flex-col lg:flex-row items-center justify-between gap-6">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-xl bg-[#141518] text-[#c5a880] flex items-center justify-center shrink-0 shadow-sm mt-0.5">
               <Sparkles className="w-6 h-6" />
             </div>
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#141518]/08 text-[#9e7a4b] text-[11px] font-semibold uppercase tracking-wider mb-1.5">
-                New Harmony Lab
+                New AI Harmony Lab
               </div>
               <h3 className="text-lg sm:text-xl font-medium text-[#141518]">
-                Interactive Chord Library & Progression Studio
+                AI Song Chord Transposer, 3-Level Arranger &amp; Progression Studio
               </h3>
               <p className="text-xs sm:text-sm text-[#5c5f6a] max-w-xl mt-1">
-                Explore diatonic triads, 7th chords, R&B cadences, Neo-Soul loops, and cinematic film score voicings with live audio synthesis and visual voicing inspect.
+                Paste any song lyrics with chords to instantly transpose across all 12 keys and let AI advance your chords in three levels — <strong>Basic</strong>, <strong>Intermediate</strong>, and <strong>Pro Masterclass</strong> voicings.
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              soundEngine.playClick(650);
-              onNavigate('chords');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="w-full md:w-auto px-6 py-3.5 rounded-full bg-[#141518] text-white hover:bg-[#2b2d35] text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-sm flex items-center justify-center gap-2 shrink-0 group"
-          >
-            <span>Explore Chords & Progressions</span>
-            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full lg:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick(720);
+                onNavigate('chords');
+                setTimeout(() => {
+                  document.getElementById('chord-transposer')?.scrollIntoView({ behavior: 'smooth' });
+                }, 120);
+              }}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-full bg-[#141518] text-[#c5a880] hover:bg-[#2b2d35] text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-sm flex items-center justify-center gap-2 ring-1 ring-[#c5a880]/40"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>AI Chord Transposer</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick(650);
+                onNavigate('chords');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-full bg-white text-[#141518] hover:bg-[#faf8f5] border border-[#dcd7ce] text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-2xs flex items-center justify-center gap-2 group"
+            >
+              <span>Chord Library</span>
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+            </button>
+          </div>
         </div>
       </section>
 

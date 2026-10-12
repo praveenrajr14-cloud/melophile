@@ -6,6 +6,7 @@ import { CircleOfFifths } from '../chords/CircleOfFifths';
 import { FullTriadsList, ALL_TRIADS, TriadItem } from '../chords/FullTriadsList';
 import { TriadInspectorModal } from '../chords/TriadInspectorModal';
 import { ChordProgressionSession } from '../chords/ChordProgressionSession';
+import { ChordTransposerTool } from '../chords/ChordTransposerTool';
 import { PIANO_KEYS_C4_TO_C6 } from '../../utils/chordInversions';
 import {
   Play,
@@ -23,6 +24,7 @@ import {
   Repeat,
   Info,
   Cloud,
+  Wand2,
 } from 'lucide-react';
 
 interface ChordItem {
@@ -636,8 +638,15 @@ export const ChordsPage: React.FC = () => {
         {/* Quick jump navigation */}
         <div className="flex items-center justify-center gap-2.5 flex-wrap mt-8">
           <a
-            href="#chord-progressions-session"
+            href="#chord-transposer"
             className="px-5 py-2 rounded-full text-xs font-bold bg-[#141518] text-[#c5a880] border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-md ring-2 ring-[#c5a880]/60 scale-105"
+          >
+            <Wand2 className="w-3.5 h-3.5 text-[#c5a880]" />
+            <span>AI Song Chord Transposer</span>
+          </a>
+          <a
+            href="#chord-progressions-session"
+            className="px-4 py-2 rounded-full text-xs font-bold bg-[#141518] text-white border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-xs"
           >
             <Repeat className="w-3.5 h-3.5 text-[#c5a880]" />
             <span>Progressions (All 12 Keys)</span>
@@ -828,6 +837,22 @@ export const ChordsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 2.4 AI SONG CHORD TRANSPOSER & 3-LEVEL HARMONIC REHARMONIZER */}
+      <ChordTransposerTool
+        onSelectChordForPiano={(name, symbol, notes, formula) => {
+          setSelectedChord({
+            id: `transposed-${symbol.toLowerCase()}`,
+            name,
+            symbol,
+            formula,
+            notes,
+            vibe: 'AI Transposed & Reharmonized Voicing',
+            description: `Active voicing from the AI Song Chord Transposer (${notes.join(' - ')}).`,
+            voicingTip: 'Listen to the inner voice movement and bass note placement.',
+          });
+        }}
+      />
 
       {/* 2.5 INTERACTIVE CHORD PROGRESSION SESSION (ALL 12 KEYS, BASIC TO ADVANCED) */}
       <ChordProgressionSession
