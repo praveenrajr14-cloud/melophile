@@ -24,26 +24,21 @@ export const LogoIntro: React.FC<LogoIntroProps> = ({ onComplete }) => {
       setStage(1);
     }, 200);
 
-    // Stage 2: Key cascade sequence
+    // Stage 2: Key cascade visual sequence (do not auto-queue Web Audio before user gesture on mobile)
     const t2 = setTimeout(() => {
       setStage(2);
-      // Key 1
       setActiveKey(0);
-      if (soundEnabled) soundEngine.playNote(261.63, 1.2); // C4
 
       setTimeout(() => {
         setActiveKey(1);
-        if (soundEnabled) soundEngine.playNote(329.63, 1.2); // E4
       }, 220);
 
       setTimeout(() => {
         setActiveKey(2);
-        if (soundEnabled) soundEngine.playNote(392.0, 1.2); // G4
       }, 440);
 
       setTimeout(() => {
         setActiveKey(3);
-        if (soundEnabled) soundEngine.playNote(493.88, 1.6); // B4
       }, 660);
 
       setTimeout(() => {

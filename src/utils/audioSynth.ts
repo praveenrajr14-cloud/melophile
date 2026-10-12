@@ -1,130 +1,203 @@
 // High-quality Web Audio API Grand Piano & UI Sound Synthesizer
-// Features Master DynamicsCompressor, Warm Acoustic Harmonic Layering & Smooth Voice-Leading Playback
+// Mobile-optimized (iOS Safari & Android Chrome):
+// - Never queues phantom notes while AudioContext is suspended during splash intro
+// - Unlocks AudioContext cleanly on first touchstart/pointerdown/keydown
+// - Zero node leaks, zero end-of-note clicks/pops, Master DynamicsCompressor
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private masterCompressor: DynamicsCompressorNode | null = null;
   private masterGainNode: GainNode | null = null;
+  private isUnlockedByGesture: boolean = false;
   public enabled: boolean = true;
 
-  private initContext() {
-    if (!this.ctx && typeof window !== 'undefined') {
+  constructor() {
+    if (typeof window !== 'undefined') {
+      const unlockHandler = () => {
+        this.isUnlockedByGesture = true;
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+      };
+
+      window.addEventListener('pointerdown', unlockHandler, { passive: true });
+      window.addEventListener('touchstart', unlockHandler, { passive: true });
+      window.addEventListener('keydown', unlockHandler, { passive: true });
+      window.addEventListener('click', unlockHandler, { passive: true });
+    }
+  }
+
+  private initContext(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    // Do not create or queue oscillators from background timers before the user has touched/clicked the page!
+    // This prevents mobile browsers from buffering splash-screen notes and blasting them later when playing the piano.
+    if (!this.isUnlockedByGesture) {
+      return false;
+    }
+
+    if (!this.ctx) {
       const AudioCtx =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return false;
+
       this.ctx = new AudioCtx();
 
-      // Master compressor prevents any digital clipping when 4-6 chord tones ring together
+      // Master compressor prevents any digital clipping on mobile phone speakers
       this.masterCompressor = this.ctx.createDynamicsCompressor();
-      this.masterCompressor.threshold.setValueAtTime(-14, this.ctx.currentTime);
-      this.masterCompressor.knee.setValueAtTime(18, this.ctx.currentTime);
-      this.masterCompressor.ratio.setValueAtTime(4, this.ctx.currentTime);
-      this.masterCompressor.attack.setValueAtTime(0.005, this.ctx.currentTime);
-      this.masterCompressor.release.setValueAtTime(0.22, this.ctx.currentTime);
+      this.masterCompressor.threshold.setValueAtTime(-16, this.ctx.currentTime);
+      this.masterCompressor.knee.setValueAtTime(20, this.ctx.currentTime);
+      this.masterCompressor.ratio.setValueAtTime(4.5, this.ctx.currentTime);
+      this.masterCompressor.attack.setValueAtTime(0.004, this.ctx.currentTime);
+      this.masterCompressor.release.setValueAtTime(0.2, this.ctx.currentTime);
 
       this.masterGainNode = this.ctx.createGain();
-      this.masterGainNode.gain.setValueAtTime(0.85, this.ctx.currentTime);
+      this.masterGainNode.gain.setValueAtTime(0.8, this.ctx.currentTime);
 
       this.masterCompressor.connect(this.masterGainNode);
       this.masterGainNode.connect(this.ctx.destination);
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
     }
+
+    return true;
   }
 
-  // Warm synthesized acoustic grand piano tone with natural hammer envelope & string decay
-  public playNote(freq: number, duration: number = 1.6, noteVolume: number = 0.22) {
+  // Warm synthesized acoustic grand piano tone with natural hammer envelope,
+  // zero-crossing fadeout (prevents mobile speaker pops), and automatic node cleanup
+  public playNote(freq: number, duration: number = 1.5, noteVolume: number = 0.22) {
     if (!this.enabled) return;
     try {
-      this.initContext();
-      if (!this.ctx || !this.masterCompressor) return;
+      if (!this.initContext() || !this.ctx || !this.masterCompressor) return;
 
-      const now = this.ctx.currentTime;
-      const safeDuration = Math.max(0.3, duration);
+      const ctx = this.ctx;
+      const compressor = this.masterCompressor;
 
-      // Gently tame higher frequencies so upper inversions sound silky and never harsh
-      const pitchAttenuation = freq > 520 ? Math.pow(520 / freq, 0.35) : 1.0;
-      const peakGain = Math.max(0.04, Math.min(0.32, noteVolume * pitchAttenuation));
+      const scheduleTone = () => {
+        if (ctx.state !== 'running') return;
 
-      // Envelope: soft felt hammer attack -> initial decay -> warm sustain tail
-      const noteGain = this.ctx.createGain();
-      noteGain.gain.setValueAtTime(0.0001, now);
-      noteGain.gain.linearRampToValueAtTime(peakGain, now + 0.018);
-      noteGain.gain.exponentialRampToValueAtTime(peakGain * 0.45, now + 0.22);
-      noteGain.gain.exponentialRampToValueAtTime(0.0001, now + safeDuration);
+        const now = ctx.currentTime + 0.005; // 5ms lookahead prevents mobile buffer click
+        const safeDuration = Math.max(0.35, duration);
 
-      // Dynamic lowpass filter simulating piano soundboard warmth
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.Q.setValueAtTime(0.7, now);
-      filter.frequency.setValueAtTime(Math.min(7500, freq * 5.2), now);
-      filter.frequency.exponentialRampToValueAtTime(
-        Math.max(380, freq * 1.4),
-        now + safeDuration * 0.85
-      );
+        // Gently tame higher frequencies so upper notes sound warm on phone speakers
+        const pitchAttenuation = freq > 480 ? Math.pow(480 / freq, 0.42) : 1.0;
+        const peakGain = Math.max(0.03, Math.min(0.26, noteVolume * pitchAttenuation));
 
-      // 1. Fundamental tone (Warm Sine)
-      const osc1 = this.ctx.createOscillator();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(freq, now);
+        // Envelope: smooth zero-start -> soft felt hammer attack -> natural decay -> true 0.0 release
+        const noteGain = ctx.createGain();
+        noteGain.gain.setValueAtTime(0.0, now);
+        noteGain.gain.linearRampToValueAtTime(peakGain, now + 0.016);
+        noteGain.gain.exponentialRampToValueAtTime(peakGain * 0.42, now + 0.2);
+        noteGain.gain.exponentialRampToValueAtTime(0.0008, now + safeDuration - 0.03);
+        // Final linear ramp to exact 0.0 prevents any pop when oscillators stop on mobile phones
+        noteGain.gain.linearRampToValueAtTime(0.0, now + safeDuration);
 
-      // 2. Acoustic body resonance (Triangle 2nd harmonic, slightly detuned for chorus warmth)
-      const osc2 = this.ctx.createOscillator();
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(freq * 2, now);
-      osc2.detune.setValueAtTime(2.5, now);
-      const osc2Gain = this.ctx.createGain();
-      osc2Gain.gain.setValueAtTime(0.18, now);
-      osc2Gain.gain.exponentialRampToValueAtTime(0.02, now + safeDuration * 0.65);
+        // Dynamic lowpass filter simulating grand piano soundboard warmth
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.Q.setValueAtTime(0.5, now);
+        filter.frequency.setValueAtTime(Math.min(4800, freq * 4.2), now);
+        filter.frequency.exponentialRampToValueAtTime(
+          Math.max(320, freq * 1.25),
+          now + safeDuration * 0.85
+        );
 
-      // 3. Gentle 3rd harmonic hammer overtone (fades quickly like a real felt hammer)
-      const osc3 = this.ctx.createOscillator();
-      osc3.type = 'sine';
-      osc3.frequency.setValueAtTime(freq * 3, now);
-      osc3.detune.setValueAtTime(-2.5, now);
-      const osc3Gain = this.ctx.createGain();
-      osc3Gain.gain.setValueAtTime(0.06, now);
-      osc3Gain.gain.exponentialRampToValueAtTime(0.001, now + Math.min(0.45, safeDuration * 0.4));
+        // 1. Fundamental tone (Warm Sine)
+        const osc1 = ctx.createOscillator();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(freq, now);
 
-      // Routing
-      osc1.connect(filter);
-      osc2.connect(osc2Gain);
-      osc2Gain.connect(filter);
-      osc3.connect(osc3Gain);
-      osc3Gain.connect(filter);
+        // 2. Acoustic body resonance (Triangle 2nd harmonic)
+        const osc2 = ctx.createOscillator();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(freq * 2, now);
+        osc2.detune.setValueAtTime(1.8, now);
+        const osc2Gain = ctx.createGain();
+        osc2Gain.gain.setValueAtTime(0.12, now);
+        osc2Gain.gain.exponentialRampToValueAtTime(0.001, now + safeDuration * 0.65);
 
-      filter.connect(noteGain);
-      noteGain.connect(this.masterCompressor);
+        // 3. Gentle 3rd harmonic overtone
+        const osc3 = ctx.createOscillator();
+        osc3.type = 'sine';
+        osc3.frequency.setValueAtTime(freq * 3, now);
+        osc3.detune.setValueAtTime(-1.8, now);
+        const osc3Gain = ctx.createGain();
+        osc3Gain.gain.setValueAtTime(0.035, now);
+        osc3Gain.gain.exponentialRampToValueAtTime(
+          0.0005,
+          now + Math.min(0.38, safeDuration * 0.35)
+        );
 
-      osc1.start(now);
-      osc2.start(now);
-      osc3.start(now);
+        // Routing
+        osc1.connect(filter);
+        osc2.connect(osc2Gain);
+        osc2Gain.connect(filter);
+        osc3.connect(osc3Gain);
+        osc3Gain.connect(filter);
 
-      const stopTime = now + safeDuration + 0.04;
-      osc1.stop(stopTime);
-      osc2.stop(stopTime);
-      osc3.stop(stopTime);
+        filter.connect(noteGain);
+        noteGain.connect(compressor);
+
+        // Clean up all nodes on completion so mobile browsers never crackle or leak audio nodes
+        osc1.onended = () => {
+          try {
+            osc1.disconnect();
+            osc2.disconnect();
+            osc3.disconnect();
+            osc2Gain.disconnect();
+            osc3Gain.disconnect();
+            filter.disconnect();
+            noteGain.disconnect();
+          } catch {
+            // Ignore
+          }
+        };
+
+        osc1.start(now);
+        osc2.start(now);
+        osc3.start(now);
+
+        const stopTime = now + safeDuration + 0.02;
+        osc1.stop(stopTime);
+        osc2.stop(stopTime);
+        osc3.stop(stopTime);
+      };
+
+      if (ctx.state === 'suspended') {
+        ctx
+          .resume()
+          .then(() => scheduleTone())
+          .catch(() => {});
+      } else {
+        scheduleTone();
+      }
     } catch (e) {
       console.warn('Audio playback error:', e);
     }
   }
 
   // Play a full chord with balanced voice scaling + subtle warm left-hand bass foundation
-  public playChord(noteNames: string[], duration: number = 1.8, arpeggiate: boolean = true) {
+  public playChord(noteNames: string[], duration: number = 1.6, arpeggiate: boolean = true) {
     if (!this.enabled || !noteNames.length) return;
 
+    this.isUnlockedByGesture = true;
     this.initContext();
 
-    // Scale per-note volume by number of voices so 4-5 note chords stay warm and clean
+    // Scale per-note volume by number of voices so chords stay warm and clean on mobile speakers
     const voiceCount = noteNames.length;
-    const baseVoiceVolume = Math.min(0.24, 0.62 / Math.max(2.5, Math.sqrt(voiceCount) * 1.45));
+    const baseVoiceVolume =
+      voiceCount === 1
+        ? 0.24
+        : Math.min(0.21, 0.56 / Math.max(2.4, Math.sqrt(voiceCount) * 1.45));
 
-    // Add a soft, warm left-hand bass anchor 1 octave below the lowest chord note (if lowest note is in octave 4+)
+    // Add a soft, warm left-hand bass anchor 1 octave below the lowest chord note (only for 3+ note chords)
     const firstNote = noteNames[0];
     const firstFreq = NOTE_FREQUENCIES[firstNote] || getNoteFrequency(firstNote);
     if (firstFreq && firstFreq >= 220 && voiceCount >= 3) {
-      this.playNote(firstFreq * 0.5, duration * 1.08, baseVoiceVolume * 0.65);
+      this.playNote(firstFreq * 0.5, duration * 1.05, baseVoiceVolume * 0.52);
     }
 
     noteNames.forEach((note, idx) => {
@@ -133,10 +206,9 @@ class SoundEngine {
         freq = getNoteFrequency(note);
       }
       if (freq) {
-        // Gentle harp-like pianist roll (22ms between fingers) for smooth sound
-        const delay = arpeggiate ? idx * 24 : 0;
-        // Emphasize bass & top melody note slightly, keep inner voices silky
-        const voiceWeight = idx === 0 ? 1.08 : idx === voiceCount - 1 ? 1.04 : 0.88;
+        const delay = arpeggiate && voiceCount > 1 ? idx * 22 : 0;
+        const voiceWeight =
+          voiceCount === 1 ? 1.0 : idx === 0 ? 1.06 : idx === voiceCount - 1 ? 1.02 : 0.88;
         const vol = baseVoiceVolume * voiceWeight;
 
         if (delay === 0) {
@@ -150,26 +222,12 @@ class SoundEngine {
     });
   }
 
-  // Play pleasant UI button click
-  public playClick(freq = 600) {
-    if (!this.enabled) return;
-    try {
-      this.initContext();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, now + 0.045);
-      gain.gain.setValueAtTime(0.06, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.05);
-    } catch {
-      // Ignored
+  // No-op or silent tactile UI helper so button clicks never produce a synthetic beep/chirp on mobile phones
+  public playClick(_freq = 520) {
+    // Intentionally silent on mobile/desktop UI buttons so only pure acoustic piano notes are heard
+    this.isUnlockedByGesture = true;
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
     }
   }
 }
@@ -269,5 +327,23 @@ export const NOTE_FREQUENCIES: Record<string, number> = {
   'A#5': 932.33,
   Bb5: 932.33,
   B5: 987.77,
+
+  // Octave 6
   C6: 1046.5,
+  'C#6': 1108.73,
+  Db6: 1108.73,
+  D6: 1174.66,
+  'D#6': 1244.51,
+  Eb6: 1244.51,
+  E6: 1318.51,
+  F6: 1396.91,
+  'F#6': 1479.98,
+  Gb6: 1479.98,
+  G6: 1567.98,
+  'G#6': 1661.22,
+  Ab6: 1661.22,
+  A6: 1760.0,
+  'A#6': 1864.66,
+  Bb6: 1864.66,
+  B6: 1975.53,
 };
