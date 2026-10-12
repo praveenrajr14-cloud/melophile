@@ -108,6 +108,7 @@ export const ChordProgressionSession: React.FC<ChordProgressionSessionProps> = (
   const stopPlayback = () => {
     timeoutIdsRef.current.forEach((t) => clearTimeout(t));
     timeoutIdsRef.current = [];
+    activeProgIdRef.current = null;
     setActiveProgId(null);
     setActiveStepIndex(-1);
   };
@@ -152,6 +153,7 @@ export const ChordProgressionSession: React.FC<ChordProgressionSessionProps> = (
   const startProgressionPlayback = (prog: ResolvedProgression) => {
     stopPlayback();
     soundEngine.playClick(720);
+    activeProgIdRef.current = prog.id;
     setActiveProgId(prog.id);
 
     const playCycle = () => {

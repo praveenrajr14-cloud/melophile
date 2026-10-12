@@ -293,25 +293,24 @@ export function transposeChord(
   if (template.quality === 'I_over_3') invType = 'first';
   if (['II_over_I', 'iv_over_I'].includes(template.quality)) invType = 'slash';
 
-  // Base interval selection with inversion offsets
+  // Base interval selection with inversion offsets (strictly ascending)
   let baseIntervals = [...QUALITY_INTERVALS[template.quality]];
   if (invType === 'first' && template.quality !== 'I_over_3') {
-    // 3rd in bass: shift root up octave
-    const third = baseIntervals[1];
-    const fifth = baseIntervals[2];
+    // 3rd in bass: shift root up octave while keeping any 7th/9th in ascending order
     const rootUpper = baseIntervals[0] + 12;
-    baseIntervals = [third, fifth, rootUpper];
+    const rest = baseIntervals.slice(1).map((v) => (v > rootUpper ? v : v));
+    baseIntervals = [...rest, rootUpper].sort((a, b) => a - b);
   } else if (invType === 'second') {
     // 5th in bass: shift root and 3rd up octave
-    const fifth = baseIntervals[2];
     const rootUpper = baseIntervals[0] + 12;
     const thirdUpper = baseIntervals[1] + 12;
-    baseIntervals = [fifth, rootUpper, thirdUpper];
+    const rest = baseIntervals.slice(2);
+    baseIntervals = [...rest, rootUpper, thirdUpper].sort((a, b) => a - b);
   }
 
   const baseMidiRoot = 60 + ((key.semitones + template.semitoneOffset) % 12); // Octave 4 base
 
-  const notes: string[] = baseIntervals.map((interval, i) => {
+  let rawMidis: number[] = baseIntervals.map((interval, i) => {
     let noteMidi = baseMidiRoot + interval;
     if (template.quality === 'II_over_I' && i === 0) {
       noteMidi = 60 + (key.semitones % 12);
@@ -322,13 +321,16 @@ export function transposeChord(
     if (template.quality === 'I_over_3' && i === 0) {
       noteMidi = 60 + ((key.semitones + 4) % 12);
     }
-
-    // Keep comfortably in C4 (60) to C6 (84)
-    while (noteMidi > 84) noteMidi -= 12;
-    while (noteMidi < 60) noteMidi += 12;
-
-    return midiToPitchString(noteMidi, key);
+    return noteMidi;
   });
+
+  // Shift entire voicing down 1 octave as a cohesive unit if lowest note is C5 (72) or higher,
+  // or if the top note exceeds C6 (84) while lowest note can safely drop 12 semitones (>= 69)
+  if (rawMidis[0] >= 72 || (rawMidis[rawMidis.length - 1] > 84 && rawMidis[0] >= 69)) {
+    rawMidis = rawMidis.map((m) => m - 12);
+  }
+
+  const notes: string[] = rawMidis.map((noteMidi) => midiToPitchString(noteMidi, key));
 
   // Calculate figured bass and inversion labels
   let inversionName = 'Root Position';

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Sparkles,
   Volume2,
@@ -15,21 +15,45 @@ import {
   ChevronDown,
   Layers,
   Crown,
+  X,
+  Repeat,
+  PanelRightOpen,
 } from 'lucide-react';
 import { soundEngine } from '../../utils/audioSynth';
 import {
   ReharmonizeLevel,
+  InversionType,
+  SmoothChordVoicing,
   KEY_OPTIONS,
   SAMPLE_SONGS,
   transposeAndReharmonizeSong,
   parseChordToken,
-  chordSymbolToNotes,
+  buildSmoothChordVoicing,
+  getRomanNumeral,
   isChordLine,
 } from '../../utils/chordTransposerEngine';
 
 interface ChordTransposerToolProps {
   onSelectChordForPiano?: (chordName: string, symbol: string, notes: string[], formula: string) => void;
 }
+
+const WHITE_KEYS_2OCT = [
+  'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4',
+  'C5', 'D5', 'E5', 'F5', 'G5', 'A5', 'B5',
+];
+
+const BLACK_KEYS_2OCT: { note: string; flats: string; leftPercent: number }[] = [
+  { note: 'C#4', flats: 'Db4', leftPercent: 5.1 },
+  { note: 'D#4', flats: 'Eb4', leftPercent: 12.25 },
+  { note: 'F#4', flats: 'Gb4', leftPercent: 26.55 },
+  { note: 'G#4', flats: 'Ab4', leftPercent: 33.7 },
+  { note: 'A#4', flats: 'Bb4', leftPercent: 40.85 },
+  { note: 'C#5', flats: 'Db5', leftPercent: 55.1 },
+  { note: 'D#5', flats: 'Eb5', leftPercent: 62.25 },
+  { note: 'F#5', flats: 'Gb5', leftPercent: 76.55 },
+  { note: 'G#5', flats: 'Ab5', leftPercent: 83.7 },
+  { note: 'A#5', flats: 'Bb5', leftPercent: 90.85 },
+];
 
 export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   onSelectChordForPiano,
@@ -39,13 +63,31 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   const [level, setSetLevel] = useState<ReharmonizeLevel>('basic');
   const [enharmonic, setEnharmonic] = useState<'auto' | 'sharp' | 'flat'>('auto');
   const [copied, setCopied] = useState<boolean>(false);
-  const [activeAuditionChord, setActiveAuditionChord] = useState<{
-    symbol: string;
-    notes: string[];
-    roman?: string;
-  } | null>(null);
+
+  // Side Popup Box state for Smooth Voice-Leading Inversion Inspector
+  const [isSidePopupOpen, setIsSidePopupOpen] = useState<boolean>(true);
+  const [inversionOverride, setInversionOverride] = useState<'auto' | InversionType>('auto');
+  const [selectedVoicing, setSelectedVoicing] = useState<SmoothChordVoicing | null>(null);
+  const [playingStepIdx, setPlayingStepIdx] = useState<number>(-1);
+  const [isLoopingChords, setIsLoopingChords] = useState<boolean>(false);
+
   const [isPlayingSequence, setIsPlayingSequence] = useState<boolean>(false);
   const [aiAnimating, setAiAnimating] = useState<boolean>(false);
+
+  const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const isPlayingRef = useRef<boolean>(false);
+  const isLoopingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isLoopingRef.current = isLoopingChords;
+  }, [isLoopingChords]);
+
+  useEffect(() => {
+    return () => {
+      timeoutIdsRef.current.forEach((t) => clearTimeout(t));
+      timeoutIdsRef.current = [];
+    };
+  }, []);
 
   // Compute transposed & AI-reharmonized output instantly
   const result = useMemo(() => {
@@ -53,56 +95,158 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   }, [inputText, targetKeyIndex, level, enharmonic]);
 
   const currentKeyIdx = result.targetKeyIndex;
+  const preferFlats =
+    enharmonic === 'flat'
+      ? true
+      : enharmonic === 'sharp'
+      ? false
+      : KEY_OPTIONS[currentKeyIdx]?.preferFlats ?? false;
+
+  // Currently displayed chord voicing in the Side Popup Box (defaults to first chord in song)
+  const activePopupVoicing: SmoothChordVoicing | null = useMemo(() => {
+    if (selectedVoicing) {
+      // Keep synced if key/level changed and chord exists in uniqueChords
+      const matched = result.uniqueChords.find((c) => c.symbol === selectedVoicing.symbol);
+      if (matched) return matched;
+      return selectedVoicing;
+    }
+    return result.uniqueChords[0] || null;
+  }, [selectedVoicing, result.uniqueChords]);
+
+  // Active inversion details based on whether user chose 'auto' (Smooth Voice-Leading) or manual override
+  const activeInversionDetail = useMemo(() => {
+    if (!activePopupVoicing) return null;
+    if (inversionOverride === 'auto') return activePopupVoicing.activeInversion;
+    return activePopupVoicing.inversions[inversionOverride];
+  }, [activePopupVoicing, inversionOverride]);
+
+  const stopSequencePlayback = () => {
+    timeoutIdsRef.current.forEach((t) => clearTimeout(t));
+    timeoutIdsRef.current = [];
+    isPlayingRef.current = false;
+    setIsPlayingSequence(false);
+    setPlayingStepIdx(-1);
+  };
 
   // Handle changing AI level with subtle audio & visual feedback
   const handleSelectLevel = (newLevel: ReharmonizeLevel) => {
+    stopSequencePlayback();
     soundEngine.playClick(newLevel === 'pro' ? 920 : newLevel === 'intermediate' ? 780 : 640);
     setAiAnimating(true);
     setSetLevel(newLevel);
+    setSelectedVoicing(null);
     setTimeout(() => setAiAnimating(false), 350);
   };
 
   // Transpose by semitone (-1 or +1)
   const handleSemitoneShift = (delta: number) => {
+    stopSequencePlayback();
     soundEngine.playClick(delta > 0 ? 760 : 620);
     const nextKey = ((currentKeyIdx + delta) % 12 + 12) % 12;
     setTargetKeyIndex(nextKey);
+    setSelectedVoicing(null);
   };
 
-  // Play single chord when clicked in the song sheet or palette
-  const handleAuditionChord = (symbol: string, roman?: string) => {
+  // Play single chord when clicked in the song sheet, palette, or side popup
+  const handleAuditionChord = (
+    symbol: string,
+    roman?: string,
+    forcedInversion?: 'auto' | InversionType
+  ) => {
     const cleanSymbol = symbol.replace(/^[([（]+|[)\]）]+$/g, '');
-    const notes = chordSymbolToNotes(cleanSymbol);
-    soundEngine.playChord(notes, 1.7, true);
-    setActiveAuditionChord({ symbol: cleanSymbol, notes, roman });
+    const existing = result.uniqueChords.find((c) => c.symbol === cleanSymbol);
+    const parsed = parseChordToken(cleanSymbol);
+    const computedRoman =
+      roman ||
+      existing?.roman ||
+      (parsed ? getRomanNumeral(parsed.rootIndex, parsed.quality, currentKeyIdx) : 'I');
+
+    const smoothVoicing =
+      existing || buildSmoothChordVoicing(cleanSymbol, computedRoman, currentKeyIdx, preferFlats);
+
+    const modeToUse = forcedInversion !== undefined ? forcedInversion : inversionOverride;
+    const invDetail =
+      modeToUse === 'auto' ? smoothVoicing.activeInversion : smoothVoicing.inversions[modeToUse];
+
+    soundEngine.playChord(invDetail.notes, 1.7, true);
+    setSelectedVoicing(smoothVoicing);
+    setIsSidePopupOpen(true);
 
     if (onSelectChordForPiano) {
-      onSelectChordForPiano(cleanSymbol, cleanSymbol, notes, roman || 'AI Voicing');
+      onSelectChordForPiano(
+        cleanSymbol,
+        cleanSymbol,
+        invDetail.notes,
+        `${computedRoman} • ${invDetail.inversionName} (${invDetail.figuredBass})`
+      );
     }
   };
 
-  // Play all unique chords in sequence
+  // Play all unique chords in sequence using their Smooth Voice-Leading Inversions
   const handlePlayAllChords = () => {
     if (isPlayingSequence || result.uniqueChords.length === 0) {
-      setIsPlayingSequence(false);
+      stopSequencePlayback();
       return;
     }
-    soundEngine.playClick(800);
-    setIsPlayingSequence(true);
 
-    result.uniqueChords.forEach((ch, idx) => {
-      setTimeout(() => {
-        soundEngine.playChord(ch.notes, 1.3, true);
-        setActiveAuditionChord({ symbol: ch.symbol, notes: ch.notes, roman: ch.roman });
-        if (onSelectChordForPiano) {
-          onSelectChordForPiano(ch.symbol, ch.symbol, ch.notes, ch.roman);
-        }
-        if (idx === result.uniqueChords.length - 1) {
-          setTimeout(() => setIsPlayingSequence(false), 1100);
-        }
-      }, idx * 1000);
-    });
+    stopSequencePlayback();
+    soundEngine.playClick(800);
+    isPlayingRef.current = true;
+    setIsPlayingSequence(true);
+    setIsSidePopupOpen(true);
+    setInversionOverride('auto');
+
+    const playCycle = () => {
+      if (!isPlayingRef.current) return;
+      const stepMs = 1150;
+
+      result.uniqueChords.forEach((ch, idx) => {
+        const t = setTimeout(() => {
+          if (!isPlayingRef.current) return;
+          setPlayingStepIdx(idx);
+          setSelectedVoicing(ch);
+          soundEngine.playChord(ch.activeInversion.notes, 1.4, true);
+
+          if (onSelectChordForPiano) {
+            onSelectChordForPiano(
+              ch.symbol,
+              ch.symbol,
+              ch.activeInversion.notes,
+              `${ch.roman} • ${ch.activeInversion.inversionName} (${ch.activeInversion.figuredBass})`
+            );
+          }
+
+          if (idx === result.uniqueChords.length - 1) {
+            const endTimer = setTimeout(() => {
+              if (!isPlayingRef.current) return;
+              if (isLoopingRef.current) {
+                playCycle();
+              } else {
+                stopSequencePlayback();
+              }
+            }, stepMs);
+            timeoutIdsRef.current.push(endTimer);
+          }
+        }, idx * stepMs);
+
+        timeoutIdsRef.current.push(t);
+      });
+    };
+
+    playCycle();
   };
+
+  const activeAuditionChord = activePopupVoicing
+    ? {
+        symbol: activePopupVoicing.symbol,
+        notes: activeInversionDetail?.notes || activePopupVoicing.notes,
+        roman: activePopupVoicing.roman,
+        inversionName:
+          activeInversionDetail?.inversionName || activePopupVoicing.activeInversion.inversionName,
+        figuredBass:
+          activeInversionDetail?.figuredBass || activePopupVoicing.activeInversion.figuredBass,
+      }
+    : null;
 
   // Copy transposed lyrics + chords
   const handleCopy = async () => {
@@ -611,7 +755,7 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
                 {isPlayingSequence ? (
                   <>
                     <Square className="w-3 h-3 fill-current" />
-                    <span>Playing Chords...</span>
+                    <span>Stop Chords</span>
                   </>
                 ) : (
                   <>
@@ -619,6 +763,23 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
                     <span>Play Song Chords</span>
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick(740);
+                  setIsSidePopupOpen((prev) => !prev);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  isSidePopupOpen
+                    ? 'bg-[#141518] text-[#c5a880] border-[#141518]'
+                    : 'bg-white hover:bg-[#faf8f5] text-[#141518] border-[#dcd7ce]'
+                }`}
+                title="Toggle Smooth Voice-Leading Inversion Side Popup"
+              >
+                <PanelRightOpen className="w-3.5 h-3.5 text-[#c5a880]" />
+                <span>Inversion Popup</span>
               </button>
 
               <button
@@ -653,8 +814,8 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
           {/* Active Clicked Chord Inspector Bar */}
           <div className="mb-4 px-4 py-2.5 rounded-2xl bg-[#faf8f5] border border-[#eae6de] flex items-center justify-between flex-wrap gap-2">
             {activeAuditionChord ? (
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-semibold text-[#5c5f6a]">Active Voicing:</span>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="text-xs font-semibold text-[#5c5f6a]">Smooth Voicing:</span>
                 <span className="px-2.5 py-0.5 rounded-md bg-[#141518] text-[#c5a880] font-mono text-xs font-bold">
                   {activeAuditionChord.symbol}
                 </span>
@@ -663,6 +824,9 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
                     ({activeAuditionChord.roman})
                   </span>
                 )}
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-mono text-[11px] font-bold">
+                  {activeAuditionChord.inversionName} ({activeAuditionChord.figuredBass})
+                </span>
                 <span className="text-xs font-mono text-[#141518]">
                   Notes: <strong>{activeAuditionChord.notes.join(' – ')}</strong>
                 </span>
@@ -671,21 +835,33 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
               <div className="text-xs text-[#5c5f6a] flex items-center gap-2">
                 <Volume2 className="w-4 h-4 text-[#9e7a4b]" />
                 <span>
-                  <strong>Tip:</strong> Click any highlighted chord in the lyrics below to hear its exact piano voicing!
+                  <strong>Tip:</strong> Click any highlighted chord in the lyrics below to hear its smooth piano inversion!
                 </span>
               </div>
             )}
 
-            {/* Quick Chord Palette Pills */}
+            {/* Quick Chord Palette Pills with Smooth Inversion Tag */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {result.uniqueChords.slice(0, 8).map((ch) => (
                 <button
                   key={ch.symbol}
                   type="button"
                   onClick={() => handleAuditionChord(ch.symbol, ch.roman)}
-                  className="px-2 py-0.5 rounded-md bg-white hover:bg-[#141518] text-[#141518] hover:text-[#c5a880] border border-[#dcd7ce] font-mono text-[11px] font-semibold transition-colors cursor-pointer"
+                  className={`px-2 py-0.5 rounded-md border font-mono text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+                    activeAuditionChord?.symbol === ch.symbol
+                      ? 'bg-[#141518] text-[#c5a880] border-[#141518]'
+                      : 'bg-white hover:bg-[#141518] text-[#141518] hover:text-[#c5a880] border-[#dcd7ce]'
+                  }`}
+                  title={`${ch.symbol} — ${ch.activeInversion.inversionName} (${ch.activeInversion.figuredBass})`}
                 >
-                  {ch.symbol}
+                  <span>{ch.symbol}</span>
+                  <span className="text-[9px] opacity-75">
+                    {ch.activeInversion.type === 'first'
+                      ? '1st'
+                      : ch.activeInversion.type === 'second'
+                      ? '2nd'
+                      : 'Root'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -719,7 +895,7 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
               </h3>
             </div>
             <span className="text-xs text-[#5c5f6a]">
-              Click any card to audition the upgraded chord voicing on piano
+              Click any card to audition the upgraded chord voicing &amp; smooth inversion on piano
             </span>
           </div>
 
@@ -743,6 +919,14 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
                   </span>
                 </div>
 
+                {item.inversionName && (
+                  <div className="mb-1.5">
+                    <span className="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-mono font-semibold">
+                      Smooth Voicing: {item.inversionName} ({item.figuredBass})
+                    </span>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-[#5c5f6a] leading-snug mb-2">
                   {item.reason}
                 </p>
@@ -755,6 +939,350 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* FLOATING SIDE POPUP BOX: SMOOTH VOICE-LEADING & INVERSION INSPECTOR  */}
+      {/* ===================================================================== */}
+      {!isSidePopupOpen && activePopupVoicing && (
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playClick(740);
+            setIsSidePopupOpen(true);
+          }}
+          className="fixed right-4 bottom-24 z-50 px-4 py-3 rounded-2xl bg-[#141518] text-white border-2 border-[#c5a880] shadow-[0_16px_40px_rgba(0,0,0,0.45)] flex items-center gap-2.5 hover:scale-105 transition-all cursor-pointer"
+          title="Open Smooth Sound Inversion Side Popup"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+          <div className="text-left">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-[#c5a880]">
+              Smooth Inversion Popup
+            </div>
+            <div className="text-xs font-bold font-mono">
+              {activePopupVoicing.symbol} • {activePopupVoicing.activeInversion.inversionName}
+            </div>
+          </div>
+        </button>
+      )}
+
+      {isSidePopupOpen && activePopupVoicing && activeInversionDetail && (
+        <aside
+          id="transposer-inversion-side-popup"
+          aria-label="Smooth Voice-Leading Inversion Side Popup"
+          className="fixed right-3 sm:right-5 top-20 sm:top-22 z-50 w-[330px] sm:w-[375px] max-h-[calc(100vh-11rem)] overflow-y-auto rounded-3xl bg-[#141518]/95 backdrop-blur-xl text-white border-2 border-[#c5a880]/70 shadow-[0_24px_70px_rgba(0,0,0,0.65)] p-4 sm:p-5 transition-all duration-300"
+        >
+          {/* Top Header */}
+          <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  isPlayingSequence ? 'bg-emerald-400 animate-ping' : 'bg-[#c5a880]'
+                }`}
+              />
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[#c5a880] font-bold">
+                  Smooth Sound Inversion Popup
+                </div>
+                <div className="text-[11px] text-stone-400">
+                  Key of {result.targetKeyName} •{' '}
+                  {playingStepIdx >= 0
+                    ? `Playing Chord ${playingStepIdx + 1} of ${result.uniqueChords.length}`
+                    : `${result.uniqueChords.length} Song Chords`}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsLoopingChords((prev) => !prev)}
+                className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                  isLoopingChords
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-white/10 text-stone-400 hover:text-white'
+                }`}
+                title="Toggle Loop Mode for Smooth Song Chords"
+              >
+                <Repeat className="w-3 h-3" />
+                <span>Loop {isLoopingChords ? 'ON' : 'OFF'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSidePopupOpen(false)}
+                className="p-1.5 rounded-full text-stone-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title="Minimize Side Popup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Active Chord & Active Inversion Hero Box */}
+          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 mb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400">
+                  Now Playing Chord
+                </span>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className="text-3xl font-serif font-bold text-white">
+                    {activePopupVoicing.symbol}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-white/10 text-[#c5a880] font-mono text-xs font-bold">
+                    {activePopupVoicing.roman}
+                  </span>
+                </div>
+              </div>
+
+              {/* Prominent Inversion Badge */}
+              <div className="text-right">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300 block mb-1">
+                  {inversionOverride === 'auto' ? '✦ Smoothest Inversion' : 'Manual Inversion'}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-bold ${
+                    activeInversionDetail.type === 'first'
+                      ? 'bg-emerald-400 text-[#141518]'
+                      : activeInversionDetail.type === 'second'
+                      ? 'bg-amber-300 text-[#141518]'
+                      : 'bg-[#c5a880] text-[#141518]'
+                  }`}
+                >
+                  <span>{activeInversionDetail.inversionName}</span>
+                  <span>({activeInversionDetail.figuredBass})</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Interactive 4-Way Inversion Selector inside Side Popup */}
+            <div className="mt-3 pt-2.5 border-t border-white/10">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-stone-400 mb-1.5">
+                Compare / Switch Inversion:
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {(
+                  [
+                    { id: 'auto', label: '✦ Smooth' },
+                    { id: 'root', label: 'Root (5/3)' },
+                    { id: 'first', label: '1st Inv (6)' },
+                    { id: 'second', label: '2nd (6/4)' },
+                  ] as const
+                ).map((tab) => {
+                  const isActive = inversionOverride === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setInversionOverride(tab.id);
+                        handleAuditionChord(
+                          activePopupVoicing.symbol,
+                          activePopupVoicing.roman,
+                          tab.id
+                        );
+                      }}
+                      className={`px-1.5 py-1.5 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#c5a880] text-[#141518] shadow-xs'
+                          : 'bg-white/10 text-stone-300 hover:bg-white/20'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Live 2-Octave Mini Piano Keyboard showing the exact inverted keys */}
+          <div className="mb-3 p-3 rounded-2xl bg-[#1d1f26] border border-white/10">
+            <div className="flex items-center justify-between text-[10px] font-mono text-stone-400 mb-2">
+              <span>LIVE PIANO VOICING (C4 – B5)</span>
+              <span className="text-[#c5a880] font-bold">
+                Bass: {activeInversionDetail.bassNote}
+              </span>
+            </div>
+
+            <div className="relative h-20 w-full select-none rounded-lg overflow-hidden border border-black/60 bg-[#111]">
+              {/* White Keys */}
+              <div className="flex h-full w-full">
+                {WHITE_KEYS_2OCT.map((wk) => {
+                  const isBass = activeInversionDetail.notes[0] === wk;
+                  const isNoteActive = activeInversionDetail.notes.includes(wk);
+                  return (
+                    <div
+                      key={wk}
+                      onClick={() => soundEngine.playChord([wk], 1.1, false)}
+                      className={`flex-1 relative border-r border-stone-300 last:border-r-0 flex flex-col justify-end items-center pb-1 cursor-pointer transition-colors ${
+                        isBass
+                          ? 'bg-[#c5a880] text-[#141518]'
+                          : isNoteActive
+                          ? 'bg-emerald-300 text-[#141518]'
+                          : 'bg-[#fdfcfa] hover:bg-stone-200 text-stone-500'
+                      }`}
+                    >
+                      <span className="text-[8px] font-mono font-bold leading-none">
+                        {wk.replace(/[45]/, '')}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Black Keys */}
+              {BLACK_KEYS_2OCT.map((bk) => {
+                const isBass =
+                  activeInversionDetail.notes[0] === bk.note ||
+                  activeInversionDetail.notes[0] === bk.flats;
+                const isNoteActive =
+                  activeInversionDetail.notes.includes(bk.note) ||
+                  activeInversionDetail.notes.includes(bk.flats);
+                return (
+                  <div
+                    key={bk.note}
+                    onClick={() => soundEngine.playChord([bk.note], 1.1, false)}
+                    style={{ left: `${bk.leftPercent}%` }}
+                    className={`absolute top-0 w-[5.2%] h-[60%] rounded-b-md border border-black z-10 flex items-end justify-center pb-1 cursor-pointer transition-colors ${
+                      isBass
+                        ? 'bg-[#c5a880] text-[#141518] shadow-md'
+                        : isNoteActive
+                        ? 'bg-emerald-400 text-[#141518] shadow-md'
+                        : 'bg-[#1a1b1f] hover:bg-stone-700 text-stone-400'
+                    }`}
+                  >
+                    {isNoteActive && (
+                      <span className="text-[7px] font-mono font-bold leading-none">
+                        {preferFlats ? bk.flats.replace(/[45]/, '') : bk.note.replace(/[45]/, '')}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Voiced Notes & Bass Role */}
+            <div className="mt-2.5 flex items-center justify-between flex-wrap gap-1.5 text-[11px] font-mono">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-stone-400">Notes:</span>
+                {activeInversionDetail.notes.map((n, i) => (
+                  <span
+                    key={i}
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                      i === 0
+                        ? 'bg-[#c5a880] text-[#141518]'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}
+                  >
+                    {n}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-stone-400">
+                Formula: <strong className="text-white">{activeInversionDetail.formula}</strong>
+              </span>
+            </div>
+
+            {/* Why this inversion gives the smoothest sound */}
+            <p className="mt-2 text-[11px] text-stone-300 leading-snug bg-white/5 p-2 rounded-xl border border-white/5">
+              <strong className="text-[#c5a880]">Why it sounds smooth: </strong>
+              {activePopupVoicing.smoothReason}
+            </p>
+          </div>
+
+          {/* All Song Chords & Their Smooth Inversions List */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-stone-400 mb-1.5">
+              <span>Song Chords &amp; Smooth Inversions</span>
+              <span>Click to Play</span>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              {result.uniqueChords.map((ch, idx) => {
+                const isCurrent = activePopupVoicing.symbol === ch.symbol;
+                return (
+                  <button
+                    key={ch.symbol}
+                    type="button"
+                    onClick={() => {
+                      setInversionOverride('auto');
+                      handleAuditionChord(ch.symbol, ch.roman, 'auto');
+                    }}
+                    className={`w-full px-3 py-2 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-[#c5a880]/20 border-[#c5a880] text-white shadow-xs'
+                        : 'bg-white/5 border-white/10 text-stone-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-white/10 text-[10px] font-mono flex items-center justify-center text-stone-300">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <span className="font-mono text-xs font-bold text-white">
+                          {ch.symbol}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#c5a880] ml-1.5">
+                          ({ch.roman})
+                        </span>
+                        <div className="text-[10px] font-mono text-stone-400">
+                          {ch.activeInversion.notes.join(' – ')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                        ch.activeInversion.type === 'first'
+                          ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30'
+                          : ch.activeInversion.type === 'second'
+                          ? 'bg-amber-300/20 text-amber-200 border border-amber-300/30'
+                          : 'bg-[#c5a880]/20 text-[#c5a880] border border-[#c5a880]/30'
+                      }`}
+                    >
+                      {ch.activeInversion.inversionName} ({ch.activeInversion.figuredBass})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bottom Controls inside Side Popup */}
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={handlePlayAllChords}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                isPlayingSequence
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-[#c5a880] hover:bg-[#d4b991] text-[#141518] font-bold'
+              }`}
+            >
+              {isPlayingSequence ? (
+                <>
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>Stop Sequence</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Play Smooth Sequence</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => soundEngine.playChord(activeInversionDetail.notes, 1.6, true)}
+              className="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-[#c5a880]" />
+              <span>Replay</span>
+            </button>
+          </div>
+        </aside>
       )}
     </section>
   );

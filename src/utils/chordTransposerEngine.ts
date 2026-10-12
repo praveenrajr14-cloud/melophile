@@ -65,12 +65,41 @@ export interface ParsedChord {
   bassIndex?: number;
 }
 
+export type InversionType = 'root' | 'first' | 'second';
+
+export interface ChordInversionDetail {
+  type: InversionType;
+  inversionName: string; // 'Root Position' | '1st Inversion' | '2nd Inversion'
+  shortLabel: string; // 'Root (5/3)' | '1st Inv (6)' | '2nd Inv (6/4)'
+  figuredBass: string; // '5/3' | '6' | '6/4' | '6/5' | '4/3'
+  formula: string; // '1 - 3 - 5' | '3 - 5 - 1' | '5 - 1 - 3'
+  bassNote: string; // e.g. 'C4'
+  bassRole: string; // e.g. 'Root (1) in Bass'
+  notes: string[];
+  midiNotes: number[];
+}
+
+export interface SmoothChordVoicing {
+  symbol: string;
+  notes: string[]; // Default smooth voice-leading notes
+  roman: string;
+  activeInversion: ChordInversionDetail;
+  smoothReason: string;
+  inversions: {
+    root: ChordInversionDetail;
+    first: ChordInversionDetail;
+    second: ChordInversionDetail;
+  };
+}
+
 export interface ReharmonizationInsight {
   fromChord: string;
   toChord: string;
   romanFunction: string;
   reason: string;
   notes: string[];
+  inversionName?: string;
+  figuredBass?: string;
 }
 
 export interface TransposedSongResult {
@@ -81,11 +110,8 @@ export interface TransposedSongResult {
   semitoneShift: number;
   level: ReharmonizeLevel;
   transposedText: string;
-  uniqueChords: {
-    symbol: string;
-    notes: string[];
-    roman: string;
-  }[];
+  uniqueChords: SmoothChordVoicing[];
+  songSequence: SmoothChordVoicing[];
   aiInsights: ReharmonizationInsight[];
 }
 
@@ -481,15 +507,10 @@ export function reharmonizeChord(
 }
 
 /**
- * Convert any chord symbol (e.g. "Cmaj9", "F#m7b5", "G/B") into playable Web Audio notes (C3-C6)
+ * Helper: get core intervals for a chord quality
  */
-export function chordSymbolToNotes(symbol: string): string[] {
-  const parsed = parseChordToken(symbol);
-  if (!parsed) return ['C4', 'E4', 'G4'];
-
-  const q = parsed.quality;
+function getQualityIntervals(q: string): number[] {
   let intervals = [0, 4, 7]; // Default Major triad
-
   if (q === 'm' || q === 'min') intervals = [0, 3, 7];
   else if (q === 'dim' || q === 'o') intervals = [0, 3, 6];
   else if (q === 'dim7' || q === 'o7') intervals = [0, 3, 6, 9];
@@ -512,25 +533,208 @@ export function chordSymbolToNotes(symbol: string): string[] {
   else if (q === '13' || q === 'maj13') intervals = [0, 4, 7, 10, 14, 21];
   else if (q === '7b9') intervals = [0, 4, 7, 10, 13];
   else if (q === '7#9') intervals = [0, 4, 7, 10, 15];
+  return intervals;
+}
 
-  const notes: string[] = [];
+function midiToNoteStr(midi: number, preferFlats = false): string {
+  const pitchIdx = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  const name = preferFlats ? CHROMATIC_FLATS[pitchIdx] : CHROMATIC_SHARPS[pitchIdx];
+  return `${name}${octave}`;
+}
 
-  // If slash chord, place bass note in Octave 3
+/**
+ * Compute all 3 core inversions (Root Position, 1st Inversion, 2nd Inversion) for any chord symbol
+ * in the warm middle piano register (C4–B5) with strict ascending pitch order.
+ */
+export function getChordInversions(
+  symbol: string,
+  preferFlats = false
+): {
+  root: ChordInversionDetail;
+  first: ChordInversionDetail;
+  second: ChordInversionDetail;
+} {
+  const parsed = parseChordToken(symbol);
+  const rootIndex = parsed ? parsed.rootIndex : 0;
+  const q = parsed ? parsed.quality : '';
+  const isMinor = /^m(?!aj)/i.test(q) || q.startsWith('min');
+  const hasSeventh = /7|9|11|13/.test(q);
+  const coreIntervals = getQualityIntervals(q);
+  const baseMidiRoot = 60 + rootIndex; // C4..B4
+
+  const buildInversion = (invType: InversionType): ChordInversionDetail => {
+    let invIntervals = [...coreIntervals];
+    if (invType === 'first') {
+      const rootUp = coreIntervals[0] + 12;
+      invIntervals = [...coreIntervals.slice(1), rootUp].sort((a, b) => a - b);
+    } else if (invType === 'second') {
+      const rootUp = coreIntervals[0] + 12;
+      const thirdUp = coreIntervals[1] + 12;
+      invIntervals = [...coreIntervals.slice(2), rootUp, thirdUp].sort((a, b) => a - b);
+    }
+
+    let rawMidis = invIntervals.map((semi) => baseMidiRoot + semi);
+
+    // Shift entire chord down 1 octave as a cohesive unit if lowest note >= C5 (72)
+    // or if top note exceeds C6 (84) while lowest note >= A4 (69)
+    if (rawMidis[0] >= 72 || (rawMidis[rawMidis.length - 1] > 84 && rawMidis[0] >= 69)) {
+      rawMidis = rawMidis.map((m) => m - 12);
+    }
+
+    const notes = rawMidis.map((m) => midiToNoteStr(m, preferFlats));
+    const bassNote = notes[0] || 'C4';
+
+    if (invType === 'first') {
+      return {
+        type: 'first',
+        inversionName: '1st Inversion',
+        shortLabel: hasSeventh ? '1st Inv (6/5)' : '1st Inv (6)',
+        figuredBass: hasSeventh ? '6/5' : '6',
+        formula: isMinor ? '♭3 - 5 - 1' : '3 - 5 - 1',
+        bassNote,
+        bassRole: isMinor ? 'Minor 3rd (♭3) in Bass' : 'Major 3rd (3) in Bass',
+        notes,
+        midiNotes: rawMidis,
+      };
+    }
+
+    if (invType === 'second') {
+      return {
+        type: 'second',
+        inversionName: '2nd Inversion',
+        shortLabel: hasSeventh ? '2nd Inv (4/3)' : '2nd Inv (6/4)',
+        figuredBass: hasSeventh ? '4/3' : '6/4',
+        formula: isMinor ? '5 - 1 - ♭3' : '5 - 1 - 3',
+        bassNote,
+        bassRole: 'Perfect 5th (5) in Bass',
+        notes,
+        midiNotes: rawMidis,
+      };
+    }
+
+    return {
+      type: 'root',
+      inversionName: 'Root Position',
+      shortLabel: hasSeventh ? 'Root (7)' : 'Root (5/3)',
+      figuredBass: hasSeventh ? '7' : '5/3',
+      formula: isMinor ? '1 - ♭3 - 5' : '1 - 3 - 5',
+      bassNote,
+      bassRole: 'Root Tone (1) in Bass',
+      notes,
+      midiNotes: rawMidis,
+    };
+  };
+
+  return {
+    root: buildInversion('root'),
+    first: buildInversion('first'),
+    second: buildInversion('second'),
+  };
+}
+
+/**
+ * Compute the optimal Smooth Voice-Leading Voicing for a chord in the target key
+ * Minimizes hand jump from the tonic center and retains common tones.
+ */
+export function buildSmoothChordVoicing(
+  symbol: string,
+  roman: string,
+  targetKeyIndex: number,
+  preferFlats = false
+): SmoothChordVoicing {
+  const parsed = parseChordToken(symbol);
+  const rootIndex = parsed ? parsed.rootIndex : targetKeyIndex;
+  const relInterval = ((rootIndex - targetKeyIndex) % 12 + 12) % 12;
+  const inversions = getChordInversions(symbol, preferFlats);
+  const tonicName = formatPitchClass(targetKeyIndex, preferFlats);
+
+  let selectedType: InversionType = 'root';
+  let smoothReason = `Root Position (5/3) anchors the ${tonicName} tonic hand position with solid acoustic grounding.`;
+
+  // Check if explicit slash bass specifies an inversion
+  if (parsed && parsed.bassIndex !== undefined) {
+    const bassDiff = ((parsed.bassIndex - rootIndex) % 12 + 12) % 12;
+    if (bassDiff === 3 || bassDiff === 4) {
+      selectedType = 'first';
+      smoothReason = `1st Inversion (${inversions.first.figuredBass}) places the 3rd (${inversions.first.bassNote}) in the bass for a smooth stepwise bassline.`;
+    } else if (bassDiff === 7 || bassDiff === 6) {
+      selectedType = 'second';
+      smoothReason = `2nd Inversion (${inversions.second.figuredBass}) places the 5th (${inversions.second.bassNote}) in the bass as a smooth pedal anchor.`;
+    }
+  } else if (relInterval === 5) {
+    // IV Subdominant -> 2nd Inversion (6/4) keeps the Tonic (1) as a common tone in the bass!
+    selectedType = 'second';
+    smoothReason = `2nd Inversion (${inversions.second.figuredBass}) keeps ${inversions.second.bassNote} anchored as a shared common tone with ${tonicName} — zero hand jump!`;
+  } else if (relInterval === 9) {
+    // vi Submediant -> 1st Inversion (6) keeps 1 and 3 in the exact same finger position!
+    selectedType = 'first';
+    smoothReason = `1st Inversion (${inversions.first.figuredBass}) shares two common tones (${inversions.first.notes[0]} & ${inversions.first.notes[1]}) with ${tonicName} — only one finger moves!`;
+  } else if (relInterval === 7) {
+    // V Dominant -> 1st Inversion (6) or 2nd Inversion (6/4) depending on closest center of gravity to tonic
+    const tonicCenter = 60 + targetKeyIndex + 3.6;
+    const firstCenter =
+      inversions.first.midiNotes.reduce((a, b) => a + b, 0) / inversions.first.midiNotes.length;
+    const secondCenter =
+      inversions.second.midiNotes.reduce((a, b) => a + b, 0) / inversions.second.midiNotes.length;
+
+    if (Math.abs(firstCenter - tonicCenter) <= Math.abs(secondCenter - tonicCenter) + 1.5) {
+      selectedType = 'first';
+      smoothReason = `1st Inversion (${inversions.first.figuredBass}) places the leading tone (${inversions.first.bassNote}) in the bass, resolving smoothly by 1 semitone into ${tonicName}.`;
+    } else {
+      selectedType = 'second';
+      smoothReason = `2nd Inversion (${inversions.second.figuredBass}) retains the dominant common tone in the middle register for a seamless cadence.`;
+    }
+  } else if (relInterval === 2) {
+    // ii Supertonic -> 1st Inversion (6) puts the Subdominant (4) in the bass
+    selectedType = 'first';
+    smoothReason = `1st Inversion (${inversions.first.figuredBass}) places ${inversions.first.bassNote} in the bass for silky pre-dominant ii6 → V → I voice-leading.`;
+  } else if (relInterval === 4) {
+    // iii Mediant -> 2nd Inversion (6/4) or 1st Inversion (6)
+    selectedType = 'second';
+    smoothReason = `2nd Inversion (${inversions.second.figuredBass}) shares upper common tones with ${tonicName} for effortless inner-voice motion.`;
+  } else if (relInterval !== 0) {
+    // Any other borrowed/chromatic chord: choose the inversion with minimal average MIDI distance from Tonic triad
+    const tonicCenter = 60 + targetKeyIndex + 3.6;
+    const candidates: InversionType[] = ['root', 'first', 'second'];
+    let bestDist = Infinity;
+    for (const c of candidates) {
+      const avg =
+        inversions[c].midiNotes.reduce((a, b) => a + b, 0) / inversions[c].midiNotes.length;
+      const dist = Math.abs(avg - tonicCenter);
+      if (dist < bestDist) {
+        bestDist = dist;
+        selectedType = c;
+      }
+    }
+    smoothReason = `${inversions[selectedType].inversionName} (${inversions[selectedType].figuredBass}) keeps all voices in the warm middle register with minimal hand movement.`;
+  }
+
+  const activeInversion = inversions[selectedType];
+
+  return {
+    symbol,
+    notes: activeInversion.notes,
+    roman,
+    activeInversion,
+    smoothReason,
+    inversions,
+  };
+}
+
+/**
+ * Convert any chord symbol (e.g. "Cmaj9", "F#m7b5", "G/B") into playable Web Audio notes (C4-B5)
+ */
+export function chordSymbolToNotes(symbol: string): string[] {
+  const parsed = parseChordToken(symbol);
+  if (!parsed) return ['C4', 'E4', 'G4'];
+  const inversions = getChordInversions(symbol, false);
   if (parsed.bassIndex !== undefined) {
-    const bassName = CHROMATIC_SHARPS[parsed.bassIndex];
-    notes.push(`${bassName}3`);
+    const bassDiff = ((parsed.bassIndex - parsed.rootIndex) % 12 + 12) % 12;
+    if (bassDiff === 3 || bassDiff === 4) return inversions.first.notes;
+    if (bassDiff === 7 || bassDiff === 6) return inversions.second.notes;
   }
-
-  for (const semi of intervals) {
-    const totalSemi = parsed.rootIndex + semi;
-    const pitchIdx = ((totalSemi % 12) + 12) % 12;
-    const octaveOffset = Math.floor(totalSemi / 12);
-    const octave = Math.min(5, 4 + octaveOffset);
-    const noteName = CHROMATIC_SHARPS[pitchIdx];
-    notes.push(`${noteName}${octave}`);
-  }
-
-  return notes;
+  return inversions.root.notes;
 }
 
 /**
@@ -557,7 +761,8 @@ export function transposeAndReharmonizeSong(
 
   const targetKeyName = formatPitchClass(actualTargetKey, preferFlats);
 
-  const uniqueChordMap = new Map<string, { symbol: string; notes: string[]; roman: string }>();
+  const uniqueChordMap = new Map<string, SmoothChordVoicing>();
+  const songSequence: SmoothChordVoicing[] = [];
   const insightsMap = new Map<string, ReharmonizationInsight>();
   let chordCounter = 0;
 
@@ -596,15 +801,13 @@ export function transposeAndReharmonizeSong(
     );
 
     const finalSymbol = reharm.symbol;
-    const notes = chordSymbolToNotes(finalSymbol);
     const roman = getRomanNumeral(newRootIndex, reharm.quality, actualTargetKey);
+    const smoothVoicing = buildSmoothChordVoicing(finalSymbol, roman, actualTargetKey, preferFlats);
+
+    songSequence.push(smoothVoicing);
 
     if (!uniqueChordMap.has(finalSymbol)) {
-      uniqueChordMap.set(finalSymbol, {
-        symbol: finalSymbol,
-        notes,
-        roman,
-      });
+      uniqueChordMap.set(finalSymbol, smoothVoicing);
     }
 
     if (reharm.reason && !insightsMap.has(`${pureTransposedSymbol}->${finalSymbol}`)) {
@@ -613,7 +816,9 @@ export function transposeAndReharmonizeSong(
         toChord: finalSymbol,
         romanFunction: roman,
         reason: reharm.reason,
-        notes,
+        notes: smoothVoicing.notes,
+        inversionName: smoothVoicing.activeInversion.inversionName,
+        figuredBass: smoothVoicing.activeInversion.figuredBass,
       });
     }
 
@@ -651,6 +856,7 @@ export function transposeAndReharmonizeSong(
     level,
     transposedText: outputLines.join('\n'),
     uniqueChords: Array.from(uniqueChordMap.values()),
+    songSequence,
     aiInsights: Array.from(insightsMap.values()),
   };
 }
