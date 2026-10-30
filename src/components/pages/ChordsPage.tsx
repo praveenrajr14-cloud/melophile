@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { soundEngine } from '../../utils/audioSynth';
 import { submitToCloudBackend, BACKEND_EMAIL } from '../../utils/cloudBackend';
@@ -9,6 +9,9 @@ import { ChordProgressionSession } from '../chords/ChordProgressionSession';
 import { ChordTransposerTool } from '../chords/ChordTransposerTool';
 import { StaffNotationSection } from '../chords/StaffNotationSection';
 import { PassingChordsSection } from '../chords/PassingChordsSection';
+import { LiveSubscriptionModal } from '../subscription/LiveSubscriptionModal';
+import { ProMemberDashboard } from '../subscription/ProMemberDashboard';
+import { ProMembership, getActiveMembership, clearActiveMembership } from '../../utils/subscriptionStorage';
 import { PIANO_KEYS_C4_TO_C6 } from '../../utils/chordInversions';
 import {
   Play,
@@ -157,16 +160,22 @@ export const ChordsPage: React.FC = () => {
     window.history.replaceState(null, '', `#${targetHash}`);
   };
 
-  // Session subscription state
-  const [isProUnlocked, setIsProUnlocked] = useState(false);
+  // Persistent Pro Membership state
+  const [activeMembership, setActiveMembership] = useState<ProMembership | null>(() => getActiveMembership());
+  const [isProUnlocked, setIsProUnlocked] = useState<boolean>(() => getActiveMembership() !== null);
   const [showSubModal, setShowSubModal] = useState(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
-  const [subSuccess, setSubSuccess] = useState(false);
-  const [subFormData, setSubFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-  });
+
+  // Synchronize state when membership is saved or cancelled
+  useEffect(() => {
+    const handleMembershipUpdate = () => {
+      const current = getActiveMembership();
+      setActiveMembership(current);
+      setIsProUnlocked(current !== null);
+    };
+    window.addEventListener('melophile-membership-updated', handleMembershipUpdate);
+    return () => window.removeEventListener('melophile-membership-updated', handleMembershipUpdate);
+  }, []);
 
   // Active playing state
   const [selectedChord, setSelectedChord] = useState<ChordItem>({
@@ -684,37 +693,6 @@ export const ChordsPage: React.FC = () => {
     });
   };
 
-  // Pro Subscription checkout synced to praveenrajr14@gmail.com Cloud Backend
-  const handleCompleteSubscription = async () => {
-    soundEngine.playClick(900);
-    try {
-      confetti({
-        particleCount: 130,
-        spread: 80,
-        origin: { y: 0.5 },
-        colors: ['#b89562', '#141518', '#f5f3ef', '#ffffff'],
-      });
-    } catch {
-      // Ignored
-    }
-    setSubSuccess(true);
-    setIsProUnlocked(true);
-
-    await submitToCloudBackend({
-      type: 'PRO_SUBSCRIPTION',
-      name: subFormData.name.trim() || 'Melophile Pro Member',
-      email: subFormData.email.trim() || BACKEND_EMAIL,
-      phone: subFormData.phone.trim() || 'Pro Checkout',
-      plan: billingCycle === 'annual' ? 'Annual All-Access Pass' : 'Monthly Membership',
-      amount: billingCycle === 'annual' ? '₹7,999 / year' : '₹999 / month',
-      course: 'Melophile Pro Masterclass & Harmony Lab',
-    });
-
-    setTimeout(() => {
-      setShowSubModal(false);
-      setSubSuccess(false);
-    }, 2000);
-  };
 
   const categoriesList = [
     {
@@ -1422,166 +1400,163 @@ export const ChordsPage: React.FC = () => {
       </div>
       )}
 
-      {/* Sub-Category 4: Subscription Paywall Card */}
+      {/* Sub-Category 4: Subscription Paywall or VIP Member Dashboard */}
       {(librarySubTab === 'membership' || librarySubTab === 'all' || activeCategory === 'all') && (
-        <section
-          id="subscription-section"
-          className="my-12 relative rounded-3xl p-8 sm:p-12 bg-gradient-to-br from-[#141518] via-[#1c1e24] to-[#121316] text-white shadow-2xl overflow-hidden border border-[#2b2d35]"
-        >
-        {/* Glow ambient decoration */}
-        <div className="absolute -top-32 -right-32 w-80 h-80 bg-[#c5a880]/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#c5a880]/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#c5a880]/15 border border-[#c5a880]/30 text-xs font-semibold uppercase tracking-wider text-[#c5a880] mb-4">
-            <Crown className="w-4 h-4 fill-current" />
-            <span>Melophile Academy Pro</span>
-          </div>
-
-          <h2 className="text-3xl sm:text-5xl font-serif font-normal tracking-tight text-white mb-4">
-            Unlock Advanced Jazz, Neo-Soul & Film Harmony
-          </h2>
-          <p className="text-stone-300 text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-8">
-            You’ve mastered foundational triads, 7ths, and pop progressions.
-            Take your playing to masterclass level with Topics 4, 5, and 6 — covering Bill Evans rootless voicings, modal interchange, tritone substitutions, and Hans Zimmer quartal harmony.
-          </p>
-
-          {/* Pricing Selector Tabs */}
-          <div className="inline-flex items-center bg-black/40 p-1 rounded-full border border-white/10 mb-8">
-            <button
-              type="button"
-              onClick={() => setBillingCycle('monthly')}
-              className={`px-5 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                billingCycle === 'monthly'
-                  ? 'bg-white text-[#141518] shadow-sm'
-                  : 'text-stone-300 hover:text-white'
-              }`}
-            >
-              Monthly Plan
-            </button>
-            <button
-              type="button"
-              onClick={() => setBillingCycle('annual')}
-              className={`px-5 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                billingCycle === 'annual'
-                  ? 'bg-[#c5a880] text-[#0b0c0e] shadow-sm font-bold'
-                  : 'text-stone-300 hover:text-white'
-              }`}
-            >
-              Annual Pass (Save 35%)
-              <span className="text-[10px] bg-black/40 text-white px-2 py-0.5 rounded-full">
-                Best Value
-              </span>
-            </button>
-          </div>
-
-          {/* Price Tag */}
-          <div className="mb-8">
-            {billingCycle === 'annual' ? (
-              <div>
-                <div className="flex items-baseline justify-center gap-2">
-                  <span className="text-4xl sm:text-6xl font-serif font-light text-[#c5a880]">
-                    ₹7,999
-                  </span>
-                  <span className="text-sm text-stone-400 font-mono">/ year</span>
-                </div>
-                <p className="text-xs text-stone-400 mt-1">
-                  Equivalent to just ₹666/month. Includes 2 months completely free!
-                </p>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-baseline justify-center gap-2">
-                  <span className="text-4xl sm:text-6xl font-serif font-light text-[#c5a880]">
-                    ₹999
-                  </span>
-                  <span className="text-sm text-stone-400 font-mono">/ month</span>
-                </div>
-                <p className="text-xs text-stone-400 mt-1">
-                  Billed monthly. Cancel anytime with 1 click.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Value Highlights */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left mb-10">
-            {[
-              {
-                icon: Layers,
-                title: 'All Advanced Topics',
-                desc: 'Instant unlock for Topics 4, 5, 6 with 50+ extended voicings & progressions.',
-              },
-              {
-                icon: Zap,
-                title: 'MIDI & PDF Lead Sheets',
-                desc: 'Downloadable transcription sheets, chord charts, and MIDI stems.',
-              },
-              {
-                icon: Crown,
-                title: 'Monthly 1-on-1 Feedback',
-                desc: 'Direct video review of your chord transitions by instructor Praveen Raj R.',
-              },
-              {
-                icon: ShieldCheck,
-                title: 'Studio Access Pass',
-                desc: 'Priority offline acoustic piano rehearsal room booking in Parassala, TVM.',
-              },
-            ].map((feature, i) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={i}
-                  className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm"
-                >
-                  <Icon className="w-5 h-5 text-[#c5a880] mb-2" />
-                  <h4 className="text-sm font-semibold text-white mb-1">
-                    {feature.title}
-                  </h4>
-                  <p className="text-xs text-stone-400 leading-relaxed">
-                    {feature.desc}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Main Action Button */}
-          {isProUnlocked ? (
-            <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-medium text-sm">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-              <span>You have Melophile Pro Active! All Topics 4-6 are fully unlocked below.</span>
-            </div>
+        <section id="subscription-section" className="my-12">
+          {isProUnlocked && activeMembership ? (
+            <ProMemberDashboard
+              membership={activeMembership}
+              onJumpToTopic={(topicId) => {
+                setLibrarySubTab('topics');
+                setTimeout(() => {
+                  document.getElementById(`topic-${topicId}`)?.scrollIntoView({ behavior: 'smooth' });
+                }, 200);
+              }}
+              onResetMembership={() => {
+                clearActiveMembership();
+                setActiveMembership(null);
+                setIsProUnlocked(false);
+              }}
+            />
           ) : (
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                type="button"
-                onClick={() => setShowSubModal(true)}
-                className="w-full sm:w-auto px-8 py-4 rounded-full bg-[#c5a880] hover:bg-[#d6bc98] text-[#0b0c0e] font-bold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-xl shadow-black/80 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
-              >
-                <span>Subscribe to Melophile Pro</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            <div className="relative rounded-3xl p-8 sm:p-12 bg-gradient-to-br from-[#141518] via-[#1c1e24] to-[#121316] text-white shadow-2xl overflow-hidden border border-[#2b2d35]">
+              {/* Glow ambient decoration */}
+              <div className="absolute -top-32 -right-32 w-80 h-80 bg-[#c5a880]/15 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#c5a880]/10 rounded-full blur-3xl pointer-events-none" />
 
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.playClick(800);
-                  setIsProUnlocked(true);
-                  try {
-                    confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
-                  } catch {
-                    // Ignored
-                  }
-                }}
-                className="text-xs text-stone-400 hover:text-white underline underline-offset-4 cursor-pointer transition-colors"
-              >
-                Demo: Test Unlock All Topics Now
-              </button>
+              <div className="relative z-10 max-w-4xl mx-auto text-center">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#c5a880]/15 border border-[#c5a880]/30 text-xs font-semibold uppercase tracking-wider text-[#c5a880] mb-4">
+                  <Crown className="w-4 h-4 fill-current" />
+                  <span>Melophile Academy Pro</span>
+                </div>
+
+                <h2 className="text-3xl sm:text-5xl font-serif font-normal tracking-tight text-white mb-4">
+                  Unlock Advanced Jazz, Neo-Soul & Film Harmony
+                </h2>
+                <p className="text-stone-300 text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-8">
+                  You’ve mastered foundational triads, 7ths, and pop progressions.
+                  Take your playing to masterclass level with Topics 4, 5, and 6 — covering Bill Evans rootless voicings, modal interchange, tritone substitutions, and Hans Zimmer quartal harmony.
+                </p>
+
+                {/* Pricing Selector Tabs */}
+                <div className="inline-flex items-center bg-black/40 p-1 rounded-full border border-white/10 mb-8">
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('monthly')}
+                    className={`px-5 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                      billingCycle === 'monthly'
+                        ? 'bg-white text-[#141518] shadow-sm'
+                        : 'text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    Monthly Plan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingCycle('annual')}
+                    className={`px-5 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      billingCycle === 'annual'
+                        ? 'bg-[#c5a880] text-[#0b0c0e] shadow-sm font-bold'
+                        : 'text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    Annual Pass (Save 35%)
+                    <span className="text-[10px] bg-black/40 text-white px-2 py-0.5 rounded-full">
+                      Best Value
+                    </span>
+                  </button>
+                </div>
+
+                {/* Price Tag */}
+                <div className="mb-8">
+                  {billingCycle === 'annual' ? (
+                    <div>
+                      <div className="flex items-baseline justify-center gap-2">
+                        <span className="text-4xl sm:text-6xl font-serif font-light text-[#c5a880]">
+                          ₹7,999
+                        </span>
+                        <span className="text-sm text-stone-400 font-mono">/ year</span>
+                      </div>
+                      <p className="text-xs text-stone-400 mt-1">
+                        Equivalent to just ₹666/month. Includes 2 months completely free!
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-baseline justify-center gap-2">
+                        <span className="text-4xl sm:text-6xl font-serif font-light text-[#c5a880]">
+                          ₹999
+                        </span>
+                        <span className="text-sm text-stone-400 font-mono">/ month</span>
+                      </div>
+                      <p className="text-xs text-stone-400 mt-1">
+                        Billed monthly. Cancel anytime with 1 click.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Value Highlights */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left mb-10">
+                  {[
+                    {
+                      icon: Layers,
+                      title: 'All Advanced Topics',
+                      desc: 'Instant unlock for Topics 4, 5, 6 with 50+ extended voicings & progressions.',
+                    },
+                    {
+                      icon: Zap,
+                      title: 'MIDI & PDF Lead Sheets',
+                      desc: 'Downloadable transcription sheets, chord charts, and audio stems.',
+                    },
+                    {
+                      icon: Crown,
+                      title: 'VIP WhatsApp Mentorship',
+                      desc: 'Direct priority line with Praveen Raj R for video feedback & harmonic advice.',
+                    },
+                    {
+                      icon: ShieldCheck,
+                      title: 'Official Tax Invoice',
+                      desc: 'Instant GST-compliant invoice receipt (SAC 999293) and obsidian VIP badge.',
+                    },
+                  ].map((feature, i) => {
+                    const Icon = feature.icon;
+                    return (
+                      <div
+                        key={i}
+                        className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm"
+                      >
+                        <Icon className="w-5 h-5 text-[#c5a880] mb-2" />
+                        <h4 className="text-sm font-semibold text-white mb-1">
+                          {feature.title}
+                        </h4>
+                        <p className="text-xs text-stone-400 leading-relaxed">
+                          {feature.desc}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Main Action Button (Clean live subscription) */}
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowSubModal(true)}
+                    className="w-full sm:w-auto px-8 py-4 rounded-full bg-[#c5a880] hover:bg-[#d6bc98] text-[#0b0c0e] font-bold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-xl shadow-black/80 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <span>Subscribe with UPI / Card</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-stone-400 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[#c5a880]" />
+                    <span>Instant activation via Dynamic UPI QR & All Indian Cards</span>
+                  </span>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </section>
+        </section>
       )}
 
       {/* Sub-Category 3 Continued: Advanced Topics (4, 5, 6) */}
@@ -1808,167 +1783,16 @@ export const ChordsPage: React.FC = () => {
     </section>
   )}
 
-  {/* 8. SUBSCRIPTION CHECKOUT MODAL */}
-  {showSubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-          <div
-            className="relative w-full max-w-md rounded-3xl bg-white border border-[#eae6de] p-6 sm:p-8 shadow-2xl text-[#141518] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Ambient accent */}
-            <div className="absolute -top-20 -right-20 w-44 h-44 bg-[#b89562]/10 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => setShowSubModal(false)}
-              className="absolute top-5 right-5 p-2 rounded-full bg-[#f5f3ef] hover:bg-[#ede8e0] text-[#5c5f6a] transition-colors cursor-pointer"
-            >
-              ✕
-            </button>
-
-            {subSuccess ? (
-              <div className="text-center py-8 space-y-4 animate-fadeIn">
-                <div className="w-16 h-16 rounded-full bg-[#f4efe6] border-2 border-[#9e7a4b] text-[#9e7a4b] mx-auto flex items-center justify-center">
-                  <Sparkles className="w-8 h-8" />
-                </div>
-                <h3 className="text-2xl font-serif text-[#141518]">
-                  Welcome to Melophile Pro!
-                </h3>
-                <p className="text-xs text-[#5c5f6a] leading-relaxed max-w-xs mx-auto">
-                  All advanced jazz voicings, modal interchange loops, and film score topics are now completely unlocked.
-                </p>
-                <div className="p-3 bg-[#f5f3ef] rounded-xl text-xs font-mono text-[#8a6839] space-y-1">
-                  <div>Subscription Status: Active • {billingCycle === 'annual' ? 'Annual Pass' : 'Monthly Pass'}</div>
-                  <div className="text-emerald-700 flex items-center justify-center gap-1.5 pt-1">
-                    <Cloud className="w-3.5 h-3.5" />
-                    <span>Synced to {BACKEND_EMAIL} Cloud</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1 rounded-md bg-[#f4efe6] text-[#9e7a4b]">
-                    <Crown className="w-4 h-4 fill-current" />
-                  </div>
-                  <span className="text-[11px] uppercase font-bold tracking-wider text-[#9e7a4b]">
-                    Melophile Pro Checkout
-                  </span>
-                </div>
-
-                <h3 className="text-2xl font-serif font-medium text-[#141518] mb-1">
-                  Complete Your Subscription
-                </h3>
-                <p className="text-xs text-[#5c5f6a] mb-5">
-                  Unlimited harmonic library access, masterclass video reviews, and studio access.
-                </p>
-
-                {/* Subscriber Details for Cloud Backend */}
-                <div className="space-y-2.5 mb-5">
-                  <input
-                    type="text"
-                    value={subFormData.name}
-                    onChange={(e) => setSubFormData({ ...subFormData, name: e.target.value })}
-                    placeholder="Your Full Name (for Pro Member Certificate)"
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#fcfbfa] border border-[#dcd7ce] text-xs text-[#141518] placeholder-stone-400 focus:outline-none focus:border-[#9e7a4b]"
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <input
-                      type="email"
-                      value={subFormData.email}
-                      onChange={(e) => setSubFormData({ ...subFormData, email: e.target.value })}
-                      placeholder="Email Address"
-                      className="w-full px-3.5 py-2 rounded-xl bg-[#fcfbfa] border border-[#dcd7ce] text-xs text-[#141518] placeholder-stone-400 focus:outline-none focus:border-[#9e7a4b]"
-                    />
-                    <input
-                      type="tel"
-                      value={subFormData.phone}
-                      onChange={(e) => setSubFormData({ ...subFormData, phone: e.target.value })}
-                      placeholder="WhatsApp / Phone"
-                      className="w-full px-3.5 py-2 rounded-xl bg-[#fcfbfa] border border-[#dcd7ce] text-xs text-[#141518] placeholder-stone-400 focus:outline-none focus:border-[#9e7a4b]"
-                    />
-                  </div>
-                </div>
-
-                {/* Plan Selection */}
-                <div className="space-y-3 mb-5">
-                  <div
-                    onClick={() => setBillingCycle('annual')}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                      billingCycle === 'annual'
-                        ? 'border-[#9e7a4b] bg-[#faf8f5] shadow-sm ring-1 ring-[#9e7a4b]/40'
-                        : 'border-[#eae6de] hover:border-[#b89562]/40 bg-white'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-[#141518]">Annual All-Access Pass</span>
-                        <span className="text-[10px] bg-[#9e7a4b] text-white px-2 py-0.5 rounded-full font-bold">
-                          Save 35%
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#5c5f6a] mt-0.5">
-                        ₹7,999 / year (₹666/mo) • 2 months free
-                      </p>
-                    </div>
-                    <div className="w-4 h-4 rounded-full border border-[#9e7a4b] flex items-center justify-center">
-                      {billingCycle === 'annual' && <div className="w-2.5 h-2.5 rounded-full bg-[#9e7a4b]" />}
-                    </div>
-                  </div>
-
-                  <div
-                    onClick={() => setBillingCycle('monthly')}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                      billingCycle === 'monthly'
-                        ? 'border-[#9e7a4b] bg-[#faf8f5] shadow-sm ring-1 ring-[#9e7a4b]/40'
-                        : 'border-[#eae6de] hover:border-[#b89562]/40 bg-white'
-                    }`}
-                  >
-                    <div>
-                      <span className="font-semibold text-sm text-[#141518]">Monthly Membership</span>
-                      <p className="text-xs text-[#5c5f6a] mt-0.5">
-                        ₹999 / month • Cancel anytime
-                      </p>
-                    </div>
-                    <div className="w-4 h-4 rounded-full border border-[#9e7a4b] flex items-center justify-center">
-                      {billingCycle === 'monthly' && <div className="w-2.5 h-2.5 rounded-full bg-[#9e7a4b]" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Guaranteed inclusions */}
-                <div className="space-y-2 mb-5 text-xs text-[#5c5f6a]">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-[#9e7a4b]" />
-                    <span>Instant access to Topics 4, 5, and 6 audio playback</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-[#9e7a4b]" />
-                    <span>Monthly 1-on-1 video critique with Praveen Raj R</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-[#9e7a4b]" />
-                    <span>PDF lead sheet downloads & studio rehearsal room perks</span>
-                  </div>
-                </div>
-
-                {/* Submit button */}
-                <button
-                  type="button"
-                  onClick={handleCompleteSubscription}
-                  className="w-full py-3.5 rounded-full bg-[#141518] hover:bg-[#2b2d35] text-white font-semibold text-xs uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Crown className="w-3.5 h-3.5 text-[#c5a880]" />
-                  <span>
-                    {billingCycle === 'annual' ? 'Start Annual Pass — ₹7,999' : 'Start Monthly Pass — ₹999'}
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+  {/* 8. LIVE SUBSCRIPTION CHECKOUT MODAL */}
+  <LiveSubscriptionModal
+    isOpen={showSubModal}
+    onClose={() => setShowSubModal(false)}
+    initialPlan={billingCycle}
+    onSuccess={(membership) => {
+      setActiveMembership(membership);
+      setIsProUnlocked(true);
+    }}
+  />
 
       {/* Active Voicing Inspector Popup Modal for Triads */}
       <TriadInspectorModal
