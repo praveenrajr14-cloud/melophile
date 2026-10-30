@@ -23,8 +23,10 @@ export interface ProMembership {
 }
 
 export const STORAGE_PRO_KEY = 'melophile_pro_membership_v1';
-export const OFFICIAL_UPI_ID = 'praveenrajr14@okaxis';
+export const OFFICIAL_UPI_ID = 'praveenrajr14@oksbi';
 export const OFFICIAL_PAYEE_NAME = 'Melophile Music Academy';
+export const INSTRUCTOR_NAME = 'PRAVEEN RAJ';
+export const OFFICIAL_BANK_NAME = 'State Bank of India (SBI)';
 
 /**
  * Check if the user currently has an active Melophile Pro membership

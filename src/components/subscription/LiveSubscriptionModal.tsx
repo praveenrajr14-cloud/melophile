@@ -7,6 +7,8 @@ import {
   ProMembership,
   OFFICIAL_UPI_ID,
   OFFICIAL_PAYEE_NAME,
+  INSTRUCTOR_NAME,
+  OFFICIAL_BANK_NAME,
   formatINR,
   generateMembershipId,
   generateInvoiceNumber,
@@ -62,6 +64,7 @@ export const LiveSubscriptionModal: React.FC<LiveSubscriptionModalProps> = ({
   // UPI state
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const [qrViewMode, setQrViewMode] = useState<'dynamic' | 'original'>('dynamic');
   const [utrNumber, setUtrNumber] = useState('');
   const [utrError, setUtrError] = useState('');
   const [timeLeft, setTimeLeft] = useState(900); // 15 mins countdown
@@ -527,28 +530,60 @@ export const LiveSubscriptionModal: React.FC<LiveSubscriptionModalProps> = ({
             {paymentMethod === 'UPI' && (
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-2xl bg-[#faf8f4] border border-[#eee9df]">
-                  {/* Dynamic QR Display */}
+                  {/* Dynamic or Official GPay QR Display */}
                   <div className="p-3 bg-white rounded-2xl shadow-md border border-[#e5dcce] shrink-0 text-center">
-                    {qrDataUrl ? (
+                    <div className="flex items-center justify-center gap-1 mb-2 bg-[#f4efe6] p-0.5 rounded-lg text-[10px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setQrViewMode('dynamic')}
+                        className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                          qrViewMode === 'dynamic' ? 'bg-[#141518] text-[#c5a880]' : 'text-stone-600 hover:text-black'
+                        }`}
+                      >
+                        Auto-Amount QR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQrViewMode('original')}
+                        className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                          qrViewMode === 'original' ? 'bg-[#141518] text-[#c5a880]' : 'text-stone-600 hover:text-black'
+                        }`}
+                      >
+                        Official GPay QR
+                      </button>
+                    </div>
+
+                    {qrViewMode === 'dynamic' ? (
+                      qrDataUrl ? (
+                        <img
+                          src={qrDataUrl}
+                          alt="Melophile UPI QR"
+                          className="w-40 h-40 object-contain mx-auto rounded-lg"
+                        />
+                      ) : (
+                        <div className="w-40 h-40 bg-stone-100 flex items-center justify-center text-xs text-stone-400">
+                          Generating QR...
+                        </div>
+                      )
+                    ) : (
                       <img
-                        src={qrDataUrl}
-                        alt="Melophile UPI QR"
+                        src="/images/praveen-gpay-qr.jpg"
+                        alt="Praveen Raj Google Pay QR"
                         className="w-40 h-40 object-contain mx-auto rounded-lg"
                       />
-                    ) : (
-                      <div className="w-40 h-40 bg-stone-100 flex items-center justify-center text-xs text-stone-400">
-                        Generating QR...
-                      </div>
                     )}
-                    <span className="text-[10px] text-stone-400 font-mono mt-1 block">
-                      Scan with any UPI App
+
+                    <span className="text-[10px] text-stone-500 font-medium mt-1.5 block">
+                      {qrViewMode === 'dynamic'
+                        ? `Auto-fills ${formatINR(amount)} in UPI app`
+                        : 'Official Google Pay Standalone QR'}
                     </span>
                   </div>
 
                   {/* UPI Details & Copy */}
                   <div className="space-y-2 text-xs flex-1 w-full">
                     <div className="flex items-center justify-between text-[11px] text-[#5c5f6a]">
-                      <span className="font-mono uppercase font-semibold">Payee Account:</span>
+                      <span className="font-mono uppercase font-semibold">Official UPI ID:</span>
                       <span className="flex items-center gap-1 text-emerald-700 font-medium">
                         <Clock className="w-3 h-3" /> Expires in {formatTimer(timeLeft)}
                       </span>
@@ -568,11 +603,19 @@ export const LiveSubscriptionModal: React.FC<LiveSubscriptionModalProps> = ({
                       </button>
                     </div>
 
-                    <div className="text-[11px] text-[#5c5f6a]">
-                      Payee Name: <strong className="text-[#141518]">{OFFICIAL_PAYEE_NAME}</strong>
-                    </div>
-                    <div className="text-[11px] text-[#5c5f6a]">
-                      Exact Amount: <strong className="text-emerald-700 font-mono text-sm">{formatINR(amount)}</strong>
+                    <div className="text-[11px] text-[#5c5f6a] space-y-0.5">
+                      <div>
+                        Account Name: <strong className="text-[#141518]">{OFFICIAL_PAYEE_NAME}</strong>
+                      </div>
+                      <div>
+                        Verified Beneficiary: <strong className="text-[#141518]">{INSTRUCTOR_NAME}</strong>
+                      </div>
+                      <div>
+                        Linked Bank: <strong className="text-[#141518]">{OFFICIAL_BANK_NAME} (Google Pay)</strong>
+                      </div>
+                      <div>
+                        Exact Amount: <strong className="text-emerald-700 font-mono text-sm">{formatINR(amount)}</strong>
+                      </div>
                     </div>
 
                     {/* Mobile UPI App Intent Buttons */}
@@ -591,7 +634,7 @@ export const LiveSubscriptionModal: React.FC<LiveSubscriptionModalProps> = ({
                           href={upiUrl}
                           className="px-2 py-1.5 rounded-lg bg-[#f0ede6] hover:bg-[#141518] text-[#141518] hover:text-[#c5a880] font-semibold text-[11px] text-center transition-colors border border-[#ded9ce]"
                         >
-                          PhonePe / Paytm
+                          PhonePe / Paytm / BHIM
                         </a>
                       </div>
                     </div>
@@ -741,26 +784,26 @@ export const LiveSubscriptionModal: React.FC<LiveSubscriptionModalProps> = ({
               <div className="space-y-4 text-xs">
                 <div className="p-4 rounded-2xl bg-[#faf8f4] border border-[#eee9df] space-y-2.5">
                   <span className="font-mono uppercase font-bold text-[10px] text-[#8a6839]">
-                    Academy Direct Bank Account Details (NEFT / IMPS):
+                    Academy Direct Bank Details (State Bank of India / NEFT):
                   </span>
                   <div className="grid grid-cols-2 gap-2 text-[#4a4d56]">
                     <div>
-                      Account Name: <strong className="text-[#141518] block">Melophile Music Academy</strong>
+                      Account Name: <strong className="text-[#141518] block">{OFFICIAL_PAYEE_NAME}</strong>
                     </div>
                     <div>
-                      Account Type: <strong className="text-[#141518] block">Current Account</strong>
+                      Beneficiary: <strong className="text-[#141518] block">{INSTRUCTOR_NAME}</strong>
                     </div>
                     <div>
-                      Account Number: <strong className="text-[#141518] font-mono block">924020018492014</strong>
+                      Bank Name: <strong className="text-[#141518] block">{OFFICIAL_BANK_NAME}</strong>
                     </div>
                     <div>
-                      IFSC Code: <strong className="text-[#141518] font-mono block">UTIB0001849</strong>
+                      Instant UPI VPA: <strong className="text-[#141518] font-mono block">{OFFICIAL_UPI_ID}</strong>
                     </div>
                     <div>
-                      Bank Branch: <strong className="text-[#141518] block">Axis Bank, Parassala Branch</strong>
+                      Studio Location: <strong className="text-[#141518] block">Parassala, Trivandrum</strong>
                     </div>
                     <div>
-                      Chief Instructor: <strong className="text-[#141518] block">Praveen Raj R</strong>
+                      Confirmation: <strong className="text-emerald-700 block">Instant via WhatsApp</strong>
                     </div>
                   </div>
                 </div>
