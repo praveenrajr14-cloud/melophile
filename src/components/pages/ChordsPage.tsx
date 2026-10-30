@@ -7,6 +7,7 @@ import { FullTriadsList, ALL_TRIADS, TriadItem } from '../chords/FullTriadsList'
 import { TriadInspectorModal } from '../chords/TriadInspectorModal';
 import { ChordProgressionSession } from '../chords/ChordProgressionSession';
 import { ChordTransposerTool } from '../chords/ChordTransposerTool';
+import { StaffNotationSection } from '../chords/StaffNotationSection';
 import { PIANO_KEYS_C4_TO_C6 } from '../../utils/chordInversions';
 import {
   Play,
@@ -25,6 +26,7 @@ import {
   Info,
   Cloud,
   Wand2,
+  BookOpen,
 } from 'lucide-react';
 
 interface ChordItem {
@@ -652,6 +654,13 @@ export const ChordsPage: React.FC = () => {
             <span>Progressions (All 12 Keys)</span>
           </a>
           <a
+            href="#staff-notation"
+            className="px-4 py-2 rounded-full text-xs font-bold bg-[#141518] text-[#c5a880] border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-xs"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#c5a880]" />
+            <span>Staff Notation (Sheet Music)</span>
+          </a>
+          <a
             href="#circle-of-fifths"
             className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f4efe6] text-[#8a6839] border border-[#e5dcce] hover:bg-[#ede5d8] transition-colors flex items-center gap-1.5 shadow-xs"
           >
@@ -869,6 +878,9 @@ export const ChordsPage: React.FC = () => {
           }
         }}
       />
+
+      {/* 2.55 INTERACTIVE STAFF NOTATION & SHEET MUSIC MASTERCLASS */}
+      <StaffNotationSection />
 
       {/* 2.6 INTERACTIVE CIRCLE OF FIFTHS */}
       <section id="circle-of-fifths" className="scroll-mt-36">

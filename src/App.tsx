@@ -20,6 +20,8 @@ export const App: React.FC = () => {
       hash.startsWith('chord') ||
       hash.startsWith('progression') ||
       hash.startsWith('topic') ||
+      hash.startsWith('staff') ||
+      hash.startsWith('sheet') ||
       hash === 'subscription-section'
     ) {
       return 'chords';
