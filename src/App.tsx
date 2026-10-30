@@ -19,6 +19,10 @@ export const App: React.FC = () => {
       hash.startsWith('full-triads') ||
       hash.startsWith('chord') ||
       hash.startsWith('progression') ||
+      hash.startsWith('passing') ||
+      hash.startsWith('transpos') ||
+      hash.startsWith('library') ||
+      hash.startsWith('triad') ||
       hash.startsWith('topic') ||
       hash.startsWith('staff') ||
       hash.startsWith('sheet') ||

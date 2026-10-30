@@ -8,6 +8,7 @@ import { TriadInspectorModal } from '../chords/TriadInspectorModal';
 import { ChordProgressionSession } from '../chords/ChordProgressionSession';
 import { ChordTransposerTool } from '../chords/ChordTransposerTool';
 import { StaffNotationSection } from '../chords/StaffNotationSection';
+import { PassingChordsSection } from '../chords/PassingChordsSection';
 import { PIANO_KEYS_C4_TO_C6 } from '../../utils/chordInversions';
 import {
   Play,
@@ -27,6 +28,9 @@ import {
   Cloud,
   Wand2,
   BookOpen,
+  GitMerge,
+  Check,
+  Sliders,
 } from 'lucide-react';
 
 interface ChordItem {
@@ -61,7 +65,98 @@ interface Topic {
   isPro?: boolean;
 }
 
+export type HarmonySuiteTab =
+  | 'transposer'
+  | 'passing-chords'
+  | 'progressions'
+  | 'library'
+  | 'staff-notation'
+  | 'circle-of-fifths'
+  | 'all';
+
+export type LibrarySubTab = 'inspector' | 'triads' | 'topics' | 'membership' | 'all';
+
+const getCategoryFromHash = (hash: string): HarmonySuiteTab => {
+  const clean = hash.replace(/^#/, '');
+  if (clean.startsWith('transpos') || clean === 'chord-transposer') return 'transposer';
+  if (clean.startsWith('passing') || clean === 'passing-chords' || clean === 'passing-chords-studio') return 'passing-chords';
+  if (clean.startsWith('progression') || clean === 'chord-progressions-session') return 'progressions';
+  if (clean.startsWith('staff') || clean.startsWith('sheet') || clean === 'staff-notation') return 'staff-notation';
+  if (clean.startsWith('circle') || clean === 'circle-of-fifths') return 'circle-of-fifths';
+  if (
+    clean.startsWith('library') ||
+    clean.startsWith('full-triads') ||
+    clean.startsWith('triad') ||
+    clean.startsWith('topic') ||
+    clean === 'chord-library' ||
+    clean === 'subscription-section'
+  ) {
+    return 'library';
+  }
+  if (clean === 'all') return 'all';
+  return 'transposer';
+};
+
+const getLibrarySubTabFromHash = (hash: string): LibrarySubTab => {
+  const clean = hash.replace(/^#/, '');
+  if (clean.startsWith('full-triads') || clean.startsWith('triad')) return 'triads';
+  if (clean.startsWith('topic')) return 'topics';
+  if (clean === 'subscription-section' || clean === 'membership') return 'membership';
+  return 'inspector';
+};
+
 export const ChordsPage: React.FC = () => {
+  // Master Category Suite State
+  const [activeCategory, setActiveCategory] = useState<HarmonySuiteTab>(() => {
+    if (typeof window !== 'undefined') {
+      return getCategoryFromHash(window.location.hash);
+    }
+    return 'transposer';
+  });
+
+  // Chord Library Sub-Category State
+  const [librarySubTab, setLibrarySubTab] = useState<LibrarySubTab>(() => {
+    if (typeof window !== 'undefined') {
+      return getLibrarySubTabFromHash(window.location.hash);
+    }
+    return 'inspector';
+  });
+
+  // Synchronize category with browser hash changes
+  React.useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash;
+      const cat = getCategoryFromHash(hash);
+      setActiveCategory(cat);
+      if (cat === 'library') {
+        setLibrarySubTab(getLibrarySubTabFromHash(hash));
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
+  const switchCategory = (cat: HarmonySuiteTab, customHash?: string) => {
+    soundEngine.playClick(850);
+    setActiveCategory(cat);
+    const targetHash =
+      customHash ||
+      (cat === 'transposer'
+        ? 'chord-transposer'
+        : cat === 'passing-chords'
+        ? 'passing-chords'
+        : cat === 'progressions'
+        ? 'chord-progressions-session'
+        : cat === 'library'
+        ? 'chord-library'
+        : cat === 'staff-notation'
+        ? 'staff-notation'
+        : cat === 'circle-of-fifths'
+        ? 'circle-of-fifths'
+        : 'all');
+    window.history.replaceState(null, '', `#${targetHash}`);
+  };
+
   // Session subscription state
   const [isProUnlocked, setIsProUnlocked] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
@@ -621,6 +716,69 @@ export const ChordsPage: React.FC = () => {
     }, 2000);
   };
 
+  const categoriesList = [
+    {
+      id: 'transposer' as HarmonySuiteTab,
+      title: 'AI Chord Transposer',
+      badge: '3 Reharm Levels',
+      desc: 'Transpose song lyrics & chords to any key with Basic, Inter, & Pro voicings.',
+      icon: Wand2,
+      accent: '#c5a880',
+    },
+    {
+      id: 'passing-chords' as HarmonySuiteTab,
+      title: 'Passing Chords',
+      badge: '3 Harmonic Levels',
+      desc: 'Walk-downs, secondary dominants (V7/x), & chromatic diminished passing chords.',
+      icon: GitMerge,
+      accent: '#10b981',
+    },
+    {
+      id: 'progressions' as HarmonySuiteTab,
+      title: 'Chord Progressions',
+      badge: 'All 12 Keys & Loop',
+      desc: 'Genre progression studio across all 12 keys with Roman numerals & continuous loop.',
+      icon: Repeat,
+      accent: '#6366f1',
+    },
+    {
+      id: 'library' as HarmonySuiteTab,
+      title: 'Chord Library',
+      badge: 'Piano & 24 Triads',
+      desc: 'Piano voicing inspector, 24 triad inversions directory, & 6-topic curriculum.',
+      icon: Layers,
+      accent: '#f59e0b',
+    },
+    {
+      id: 'staff-notation' as HarmonySuiteTab,
+      title: 'Staff Notation',
+      badge: 'Sheet Music Guide',
+      desc: 'Clefs, notes, rests, accidentals, key signatures, & interactive note trainer.',
+      icon: BookOpen,
+      accent: '#06b6d4',
+    },
+    {
+      id: 'circle-of-fifths' as HarmonySuiteTab,
+      title: 'Circle of Fifths',
+      badge: 'Wheel of 12 Keys',
+      desc: 'Interactive 12-key geometric wheel showing key signatures & relative minors.',
+      icon: Sparkles,
+      accent: '#ec4899',
+    },
+    {
+      id: 'all' as HarmonySuiteTab,
+      title: 'View All Modules',
+      badge: 'Continuous Scroll',
+      desc: 'Browse the entire interactive harmony studio together on a single page.',
+      icon: Music2,
+      accent: '#8a6839',
+    },
+  ];
+
+  const currentCategoryInfo =
+    categoriesList.find((c) => c.id === activeCategory) || categoriesList[0];
+  const CurrentCatIcon = currentCategoryInfo.icon;
+
   return (
     <div className="relative w-full text-[#141518] pt-24 pb-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       {/* 1. HEADER */}
@@ -637,55 +795,293 @@ export const ChordsPage: React.FC = () => {
           Click any chord to hear authentic synthesized voicings and see the exact finger placements.
         </p>
 
-        {/* Quick jump navigation */}
-        <div className="flex items-center justify-center gap-2.5 flex-wrap mt-8">
-          <a
-            href="#chord-transposer"
-            className="px-5 py-2 rounded-full text-xs font-bold bg-[#141518] text-[#c5a880] border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-md ring-2 ring-[#c5a880]/60 scale-105"
-          >
-            <Wand2 className="w-3.5 h-3.5 text-[#c5a880]" />
-            <span>AI Song Chord Transposer</span>
-          </a>
-          <a
-            href="#chord-progressions-session"
-            className="px-4 py-2 rounded-full text-xs font-bold bg-[#141518] text-white border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-xs"
-          >
-            <Repeat className="w-3.5 h-3.5 text-[#c5a880]" />
-            <span>Progressions (All 12 Keys)</span>
-          </a>
-          <a
-            href="#staff-notation"
-            className="px-4 py-2 rounded-full text-xs font-bold bg-[#141518] text-[#c5a880] border border-[#2b2d35] hover:bg-[#2b2d35] transition-all flex items-center gap-2 shadow-xs"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-[#c5a880]" />
-            <span>Staff Notation (Sheet Music)</span>
-          </a>
-          <a
-            href="#circle-of-fifths"
-            className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f4efe6] text-[#8a6839] border border-[#e5dcce] hover:bg-[#ede5d8] transition-colors flex items-center gap-1.5 shadow-xs"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#9e7a4b]" />
-            Circle of Fifths
-          </a>
-          <a
-            href="#full-triads-list"
-            className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f4efe6] text-[#8a6839] border border-[#e5dcce] hover:bg-[#ede5d8] transition-colors flex items-center gap-1.5 shadow-xs"
-          >
-            <Layers className="w-3.5 h-3.5 text-[#9e7a4b]" />
-            24 Triads &amp; Inversions
-          </a>
-          <a
-            href="#subscription-section"
-            className="px-4 py-2 rounded-full text-xs font-semibold bg-[#141518] text-white flex items-center gap-1.5 shadow-xs"
-          >
-            <Crown className="w-3.5 h-3.5 text-[#c5a880]" />
-            Pro Subscription
-          </a>
+        {/* MASTER CATEGORY NAVIGATION TABS */}
+        <div id="harmony-suite-nav" className="scroll-mt-28 mt-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
+            {categoriesList.map((cat) => {
+              const isActive = activeCategory === cat.id;
+              const Icon = cat.icon;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => switchCategory(cat.id)}
+                  className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between group relative overflow-hidden ${
+                    isActive
+                      ? 'bg-[#141518] text-white border-[#3b3e4a] shadow-xl ring-2 ring-[#c5a880]'
+                      : 'bg-white/90 hover:bg-white text-[#141518] border-[#eae6de] hover:border-[#c5a880]/60 shadow-xs hover:shadow-md'
+                  }`}
+                >
+                  {/* Top row with icon & badge */}
+                  <div className="flex items-center justify-between gap-1 mb-2">
+                    <div
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition-all ${
+                        isActive
+                          ? 'bg-[#c5a880] text-[#0b0c0e] shadow-sm'
+                          : 'bg-[#f4efe6] text-[#8a6839] group-hover:bg-[#141518] group-hover:text-[#c5a880]'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <span
+                      className={`text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded-full font-semibold truncate ${
+                        isActive
+                          ? 'bg-white/10 text-[#c5a880]'
+                          : 'bg-[#f5f3ef] text-[#8a6839]'
+                      }`}
+                    >
+                      {cat.badge}
+                    </span>
+                  </div>
+
+                  {/* Title & subtitle */}
+                  <div>
+                    <h4 className="font-serif text-xs sm:text-sm font-semibold tracking-tight leading-tight line-clamp-1">
+                      {cat.title}
+                    </h4>
+                    <p
+                      className={`text-[10px] sm:text-[11px] mt-1 leading-snug line-clamp-2 ${
+                        isActive ? 'text-stone-300' : 'text-[#6b6e79]'
+                      }`}
+                    >
+                      {cat.desc}
+                    </p>
+                  </div>
+
+                  {isActive && (
+                    <div className="absolute top-0 right-0 w-8 h-8 pointer-events-none">
+                      <div className="w-2 h-2 rounded-full bg-[#c5a880] absolute top-2 right-2 animate-pulse" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* 2. CHORD VISUALIZER & PIANO KEYBOARD VIEWER */}
-      <div className="relative mb-14 bg-white/95 backdrop-blur-md rounded-3xl border border-[#eae6de] p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
+      {/* ACTIVE CATEGORY CONTEXT BANNER */}
+      <div className="mb-10 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#faf7f2] via-white to-[#f7f3ea] border border-[#e8e2d5] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[#141518] text-[#c5a880] flex items-center justify-center shrink-0 shadow-sm">
+            <CurrentCatIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#9e7a4b] font-bold">
+                Active Category
+              </span>
+              <span className="text-[10px] text-stone-400">•</span>
+              <span className="text-[10px] font-medium text-stone-500">
+                Module {categoriesList.findIndex((c) => c.id === activeCategory) + 1} of 7
+              </span>
+            </div>
+            <h3 className="text-base sm:text-lg font-serif font-semibold text-[#141518]">
+              {currentCategoryInfo.title}
+            </h3>
+            <p className="text-xs text-[#5c5f6a] mt-0.5">{currentCategoryInfo.desc}</p>
+          </div>
+        </div>
+
+        {/* Quick category switcher links */}
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="text-[11px] text-stone-400 font-mono hidden sm:inline">Switch To:</span>
+          {categoriesList
+            .filter((c) => c.id !== activeCategory && c.id !== 'all')
+            .slice(0, 3)
+            .map((other) => (
+              <button
+                key={other.id}
+                type="button"
+                onClick={() => switchCategory(other.id)}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white hover:bg-[#141518] text-[#5c5f6a] hover:text-[#c5a880] border border-[#eae6de] transition-colors cursor-pointer shadow-2xs"
+              >
+                {other.title}
+              </button>
+            ))}
+          {activeCategory !== 'all' ? (
+            <button
+              type="button"
+              onClick={() => switchCategory('all')}
+              className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#141518] text-[#c5a880] hover:bg-[#2b2d35] transition-colors cursor-pointer shadow-xs"
+            >
+              View All
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => switchCategory('transposer')}
+              className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#141518] text-[#c5a880] hover:bg-[#2b2d35] transition-colors cursor-pointer shadow-xs"
+            >
+              Focused Mode
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. CATEGORY 1: AI SONG CHORD TRANSPOSER */}
+      {(activeCategory === 'transposer' || activeCategory === 'all') && (
+        <section id="chord-transposer" className="scroll-mt-32 mb-16">
+          <ChordTransposerTool
+            initialEnablePassingChords={false}
+            onSelectChordForPiano={(name, symbol, notes, formula) => {
+              setSelectedChord({
+                id: `transposed-${symbol.toLowerCase()}`,
+                name,
+                symbol,
+                formula,
+                notes,
+                vibe: 'AI Transposed & Reharmonized Voicing',
+                description: `Active voicing from the AI Song Chord Transposer (${notes.join(' - ')}).`,
+                voicingTip: 'Listen to the inner voice movement and bass note placement.',
+              });
+            }}
+          />
+        </section>
+      )}
+
+      {/* 3. CATEGORY 2: PASSING CHORDS STUDIO */}
+      {(activeCategory === 'passing-chords' || activeCategory === 'all') && (
+        <section id="passing-chords" className="scroll-mt-32 mb-16">
+          <PassingChordsSection
+            onSelectChordForPiano={(name, symbol, notes, formula) => {
+              setSelectedChord({
+                id: `passing-${symbol.toLowerCase()}`,
+                name,
+                symbol,
+                formula,
+                notes,
+                vibe: 'Passing Chord Voicing',
+                description: `Active passing chord voicing (${notes.join(' - ')}).`,
+                voicingTip: 'Notice the smooth semitone movement toward the target resolution chord.',
+              });
+            }}
+          />
+        </section>
+      )}
+
+      {/* 4. CATEGORY 3: CHORD PROGRESSIONS SESSION (ALL 12 KEYS & LOOP) */}
+      {(activeCategory === 'progressions' || activeCategory === 'all') && (
+        <section id="chord-progressions-session" className="scroll-mt-32 mb-16">
+          <ChordProgressionSession
+            onSelectChord={(c) => setSelectedChord(c)}
+            isProUnlocked={isProUnlocked}
+            onOpenSubscription={() => setShowSubModal(true)}
+            onDemoUnlock={() => {
+              soundEngine.playClick(800);
+              setIsProUnlocked(true);
+              try {
+                confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+              } catch {
+                // Ignored
+              }
+            }}
+          />
+        </section>
+      )}
+
+      {/* 5. CATEGORY 4: CHORD LIBRARY & VOICINGS */}
+      {(activeCategory === 'library' || activeCategory === 'all') && (
+        <section id="chord-library" className="scroll-mt-32 mb-16 space-y-12">
+          {/* Sub-category selector bar inside Chord Library */}
+          {activeCategory === 'library' && (
+            <div className="p-4 sm:p-6 rounded-3xl bg-white border border-[#eae6de] shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#9e7a4b] font-semibold">
+                    Chord Library Sub-Categories
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-serif text-[#141518]">
+                    Piano Voicings, Triads Directory &amp; Harmony Topics
+                  </h3>
+                  <p className="text-xs text-[#5c5f6a] mt-1">
+                    Select a sub-category below to inspect the keyboard, browse all 24 triads, or study harmonic topics.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap bg-[#f5f3ef] p-1.5 rounded-2xl border border-[#e6e2d8]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick(800);
+                      setLibrarySubTab('inspector');
+                      window.history.replaceState(null, '', '#chord-library');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      librarySubTab === 'inspector'
+                        ? 'bg-[#141518] text-white shadow-xs'
+                        : 'text-[#5c5f6a] hover:text-[#141518]'
+                    }`}
+                  >
+                    <span>🎹 Piano Inspector</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick(800);
+                      setLibrarySubTab('triads');
+                      window.history.replaceState(null, '', '#full-triads-list');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      librarySubTab === 'triads'
+                        ? 'bg-[#141518] text-white shadow-xs'
+                        : 'text-[#5c5f6a] hover:text-[#141518]'
+                    }`}
+                  >
+                    <span>📋 24 Triads &amp; Inversions</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick(800);
+                      setLibrarySubTab('topics');
+                      window.history.replaceState(null, '', '#topic-1');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      librarySubTab === 'topics'
+                        ? 'bg-[#141518] text-white shadow-xs'
+                        : 'text-[#5c5f6a] hover:text-[#141518]'
+                    }`}
+                  >
+                    <span>📚 Topics 01–06</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick(800);
+                      setLibrarySubTab('membership');
+                      window.history.replaceState(null, '', '#subscription-section');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      librarySubTab === 'membership'
+                        ? 'bg-[#141518] text-[#c5a880] shadow-xs'
+                        : 'text-[#5c5f6a] hover:text-[#141518]'
+                    }`}
+                  >
+                    <span>👑 Pro Membership</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick(800);
+                      setLibrarySubTab('all');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      librarySubTab === 'all'
+                        ? 'bg-[#141518] text-white shadow-xs'
+                        : 'text-[#5c5f6a] hover:text-[#141518]'
+                    }`}
+                  >
+                    <span>Show All</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-Category 1: Piano Voicing Inspector */}
+          {(librarySubTab === 'inspector' || librarySubTab === 'all' || activeCategory === 'all') && (
+            <div id="voicing-inspector" className="relative bg-white/95 backdrop-blur-md rounded-3xl border border-[#eae6de] p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Chord metadata display (5 cols) */}
           <div className="lg:col-span-5 space-y-2">
@@ -846,57 +1242,21 @@ export const ChordsPage: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
-      {/* 2.4 AI SONG CHORD TRANSPOSER & 3-LEVEL HARMONIC REHARMONIZER */}
-      <ChordTransposerTool
-        onSelectChordForPiano={(name, symbol, notes, formula) => {
-          setSelectedChord({
-            id: `transposed-${symbol.toLowerCase()}`,
-            name,
-            symbol,
-            formula,
-            notes,
-            vibe: 'AI Transposed & Reharmonized Voicing',
-            description: `Active voicing from the AI Song Chord Transposer (${notes.join(' - ')}).`,
-            voicingTip: 'Listen to the inner voice movement and bass note placement.',
-          });
-        }}
-      />
+      {/* Sub-Category 2: 24 Triads & Inversions Directory */}
+      {(librarySubTab === 'triads' || librarySubTab === 'all' || activeCategory === 'all') && (
+        <section id="full-triads-list" className="scroll-mt-36">
+          <FullTriadsList
+            onSelectChord={(c) => setSelectedChord(c)}
+            selectedChordId={selectedChord.id}
+          />
+        </section>
+      )}
 
-      {/* 2.5 INTERACTIVE CHORD PROGRESSION SESSION (ALL 12 KEYS, BASIC TO ADVANCED) */}
-      <ChordProgressionSession
-        onSelectChord={(c) => setSelectedChord(c)}
-        isProUnlocked={isProUnlocked}
-        onOpenSubscription={() => setShowSubModal(true)}
-        onDemoUnlock={() => {
-          soundEngine.playClick(800);
-          setIsProUnlocked(true);
-          try {
-            confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
-          } catch {
-            // Ignored
-          }
-        }}
-      />
-
-      {/* 2.55 INTERACTIVE STAFF NOTATION & SHEET MUSIC MASTERCLASS */}
-      <StaffNotationSection />
-
-      {/* 2.6 INTERACTIVE CIRCLE OF FIFTHS */}
-      <section id="circle-of-fifths" className="scroll-mt-36">
-        <CircleOfFifths onSelectChord={(c) => setSelectedChord(c)} />
-      </section>
-
-      {/* 2.7 FULL 24 MAJOR & MINOR TRIADS DIRECTORY (LIST-WISE) */}
-      <section id="full-triads-list" className="scroll-mt-36">
-        <FullTriadsList
-          onSelectChord={(c) => setSelectedChord(c)}
-          selectedChordId={selectedChord.id}
-        />
-      </section>
-
-      {/* 3. FREE TOPICS (1, 2, 3) */}
-      <div className="space-y-20">
+      {/* Sub-Category 3: Free Topics (1, 2, 3) */}
+      {(librarySubTab === 'topics' || librarySubTab === 'all' || activeCategory === 'all') && (
+        <div className="space-y-20">
         {topics.slice(0, 3).map((topic) => (
           <section key={topic.id} id={`topic-${topic.id}`} className="scroll-mt-40">
             {/* Topic Header */}
@@ -1060,12 +1420,14 @@ export const ChordsPage: React.FC = () => {
           </section>
         ))}
       </div>
+      )}
 
-      {/* 4. SUBSCRIPTION PAYWALL CARD (AFTER TOPIC 3) */}
-      <section
-        id="subscription-section"
-        className="my-24 relative rounded-3xl p-8 sm:p-12 bg-gradient-to-br from-[#141518] via-[#1c1e24] to-[#121316] text-white shadow-2xl overflow-hidden border border-[#2b2d35]"
-      >
+      {/* Sub-Category 4: Subscription Paywall Card */}
+      {(librarySubTab === 'membership' || librarySubTab === 'all' || activeCategory === 'all') && (
+        <section
+          id="subscription-section"
+          className="my-12 relative rounded-3xl p-8 sm:p-12 bg-gradient-to-br from-[#141518] via-[#1c1e24] to-[#121316] text-white shadow-2xl overflow-hidden border border-[#2b2d35]"
+        >
         {/* Glow ambient decoration */}
         <div className="absolute -top-32 -right-32 w-80 h-80 bg-[#c5a880]/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#c5a880]/10 rounded-full blur-3xl pointer-events-none" />
@@ -1220,9 +1582,11 @@ export const ChordsPage: React.FC = () => {
           )}
         </div>
       </section>
+      )}
 
-      {/* 5. ADVANCED TOPICS (4, 5, 6 - LOCKED OR UNLOCKED BASED ON SUBSCRIPTION) */}
-      <div className="space-y-20">
+      {/* Sub-Category 3 Continued: Advanced Topics (4, 5, 6) */}
+      {(librarySubTab === 'topics' || librarySubTab === 'all' || activeCategory === 'all') && (
+        <div className="space-y-20">
         {topics.slice(3, 6).map((topic) => (
           <section
             key={topic.id}
@@ -1426,9 +1790,26 @@ export const ChordsPage: React.FC = () => {
           </section>
         ))}
       </div>
+      )}
+    </section>
+  )}
 
-      {/* 6. SUBSCRIPTION CHECKOUT MODAL */}
-      {showSubModal && (
+  {/* 6. CATEGORY 5: STAFF NOTATION & SHEET MUSIC MASTERCLASS */}
+  {(activeCategory === 'staff-notation' || activeCategory === 'all') && (
+    <section id="staff-notation" className="scroll-mt-32 mb-16">
+      <StaffNotationSection />
+    </section>
+  )}
+
+  {/* 7. CATEGORY 6: INTERACTIVE CIRCLE OF FIFTHS */}
+  {(activeCategory === 'circle-of-fifths' || activeCategory === 'all') && (
+    <section id="circle-of-fifths" className="scroll-mt-32 mb-16">
+      <CircleOfFifths onSelectChord={(c) => setSelectedChord(c)} />
+    </section>
+  )}
+
+  {/* 8. SUBSCRIPTION CHECKOUT MODAL */}
+  {showSubModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
           <div
             className="relative w-full max-w-md rounded-3xl bg-white border border-[#eae6de] p-6 sm:p-8 shadow-2xl text-[#141518] overflow-hidden"

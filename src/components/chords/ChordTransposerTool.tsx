@@ -42,6 +42,8 @@ import {
 
 interface ChordTransposerToolProps {
   onSelectChordForPiano?: (chordName: string, symbol: string, notes: string[], formula: string) => void;
+  initialEnablePassingChords?: boolean;
+  initialPassingLevel?: PassingChordLevel;
 }
 
 const WHITE_KEYS_2OCT = [
@@ -64,6 +66,8 @@ const BLACK_KEYS_2OCT: { note: string; flats: string; leftPercent: number }[] = 
 
 export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   onSelectChordForPiano,
+  initialEnablePassingChords = false,
+  initialPassingLevel = 'intermediate',
 }) => {
   const [inputText, setInputText] = useState<string>(SAMPLE_SONGS[0].sheet);
   const [targetKeyIndex, setTargetKeyIndex] = useState<number | null>(null);
@@ -72,9 +76,15 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
 
   // Passing Chords Studio state
-  const [enablePassingChords, setEnablePassingChords] = useState<boolean>(false);
-  const [passingLevel, setPassingLevel] = useState<PassingChordLevel>('intermediate');
+  const [enablePassingChords, setEnablePassingChords] = useState<boolean>(initialEnablePassingChords);
+  const [passingLevel, setPassingLevel] = useState<PassingChordLevel>(initialPassingLevel);
   const [playingCadenceId, setPlayingCadenceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialEnablePassingChords !== undefined) {
+      setEnablePassingChords(initialEnablePassingChords);
+    }
+  }, [initialEnablePassingChords]);
 
   // Side Popup Box state for Smooth Voice-Leading Inversion Inspector
   const [isSidePopupOpen, setIsSidePopupOpen] = useState<boolean>(true);
