@@ -18,10 +18,17 @@ import {
   X,
   Repeat,
   PanelRightOpen,
+  ArrowRight,
+  GitMerge,
+  ToggleLeft,
+  ToggleRight,
+  BookOpen,
 } from 'lucide-react';
 import { soundEngine } from '../../utils/audioSynth';
 import {
   ReharmonizeLevel,
+  PassingChordLevel,
+  PassingChordTransition,
   InversionType,
   SmoothChordVoicing,
   KEY_OPTIONS,
@@ -64,6 +71,11 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   const [enharmonic, setEnharmonic] = useState<'auto' | 'sharp' | 'flat'>('auto');
   const [copied, setCopied] = useState<boolean>(false);
 
+  // Passing Chords Studio state
+  const [enablePassingChords, setEnablePassingChords] = useState<boolean>(false);
+  const [passingLevel, setPassingLevel] = useState<PassingChordLevel>('intermediate');
+  const [playingCadenceId, setPlayingCadenceId] = useState<string | null>(null);
+
   // Side Popup Box state for Smooth Voice-Leading Inversion Inspector
   const [isSidePopupOpen, setIsSidePopupOpen] = useState<boolean>(true);
   const [inversionOverride, setInversionOverride] = useState<'auto' | InversionType>('auto');
@@ -89,10 +101,13 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
     };
   }, []);
 
-  // Compute transposed & AI-reharmonized output instantly
+  // Compute transposed & AI-reharmonized output with optional Passing Chords instantly
   const result = useMemo(() => {
-    return transposeAndReharmonizeSong(inputText, targetKeyIndex, level, enharmonic);
-  }, [inputText, targetKeyIndex, level, enharmonic]);
+    return transposeAndReharmonizeSong(inputText, targetKeyIndex, level, enharmonic, {
+      enablePassingChords,
+      passingChordLevel: passingLevel,
+    });
+  }, [inputText, targetKeyIndex, level, enharmonic, enablePassingChords, passingLevel]);
 
   const currentKeyIdx = result.targetKeyIndex;
   const preferFlats =
@@ -248,6 +263,34 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
       }
     : null;
 
+  // Audition 3-chord cadence for a passing chord transition (Chord A -> Passing Chord -> Chord B)
+  const handlePlayCadence = (trans: PassingChordTransition) => {
+    stopSequencePlayback();
+    soundEngine.playClick(720);
+    setPlayingCadenceId(trans.id);
+
+    // Step 1: fromChord (0.75s)
+    soundEngine.playChord(trans.cadenceNotes.from, 0.75, true);
+
+    // Step 2: passingChord after 800ms
+    const t1 = setTimeout(() => {
+      soundEngine.playChord(trans.cadenceNotes.passing, 0.85, true);
+      setSelectedVoicing(trans.voicing);
+      setIsSidePopupOpen(true);
+    }, 800);
+
+    // Step 3: toChord after 1650ms
+    const t2 = setTimeout(() => {
+      soundEngine.playChord(trans.cadenceNotes.to, 1.4, true);
+    }, 1650);
+
+    const t3 = setTimeout(() => {
+      setPlayingCadenceId(null);
+    }, 3100);
+
+    timeoutIdsRef.current.push(t1, t2, t3);
+  };
+
   // Copy transposed lyrics + chords
   const handleCopy = async () => {
     soundEngine.playClick(840);
@@ -263,6 +306,16 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
   // Download as .txt lead sheet
   const handleDownloadTxt = () => {
     soundEngine.playClick(750);
+    const passingSummary = enablePassingChords
+      ? `Passing Chords Mode: ACTIVE (${passingLevel.toUpperCase()} Tier)\nPassing Transitions: ${
+          result.passingTransitions.length > 0
+            ? result.passingTransitions
+                .map((t) => `${t.fromChord} -> [${t.passingChord}] -> ${t.toChord}`)
+                .join(' | ')
+            : 'None'
+        }\n`
+      : `Passing Chords Mode: OFF\n`;
+
     const header = [
       `==========================================================`,
       `MELOPHILE MUSIC ACADEMY — AI CHORD TRANSPOSER LEAD SHEET`,
@@ -270,6 +323,7 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
         result.semitoneShift >= 0 ? `+${result.semitoneShift}` : result.semitoneShift
       } semitones)`,
       `AI Harmonic Level: ${level.toUpperCase()}`,
+      passingSummary,
       `Chords Used: ${result.uniqueChords.map((c) => `${c.symbol} (${c.notes.join('-')})`).join(' | ')}`,
       `==========================================================\n\n`,
     ].join('\n');
@@ -313,6 +367,31 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
         return (
           <div key={lineIdx} className="whitespace-pre leading-relaxed font-mono text-xs sm:text-sm">
             {parts.map((part, pIdx) => {
+              // Check if token is a passing chord marker e.g. [pass: G/B]
+              const passMatch = part.match(/^\[pass(ing)?:\s*([^\]]+)\]$/i);
+              if (passMatch) {
+                const passSymbol = passMatch[2].trim();
+                const isSelected = activeAuditionChord?.symbol === passSymbol;
+                return (
+                  <button
+                    key={pIdx}
+                    type="button"
+                    onClick={() => handleAuditionChord(passSymbol)}
+                    title={`Passing Chord: ${passSymbol} (${passingLevel}) — Click to audition on piano`}
+                    className={`inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 rounded-full font-mono text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                      isSelected
+                        ? 'bg-amber-600 text-white ring-2 ring-amber-400 scale-105'
+                        : 'bg-amber-100/90 hover:bg-amber-200 text-amber-900 border border-amber-300/80 hover:scale-105'
+                    }`}
+                  >
+                    <span className="text-[9px] uppercase px-1 rounded-full bg-amber-500/25 text-amber-900 font-bold tracking-wider">
+                      pass
+                    </span>
+                    <span>{passSymbol}</span>
+                  </button>
+                );
+              }
+
               const stripped = part.replace(/^[([（]+|[)\]）]+$/g, '');
               if (parseChordToken(stripped)) {
                 const isSelected = activeAuditionChord?.symbol === stripped;
@@ -342,14 +421,37 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
         );
       }
 
-      // Check if line has inline bracketed chords like [C] Amazing [G] grace
-      if (/\[([A-G][#b]?[^\]]*)\]/.test(line)) {
-        const segments = line.split(/(\[[A-G][#b]?[^\]]*\])/g);
+      // Check if line has inline bracketed chords like [C] Amazing [G] grace or [pass: G/B]
+      if (/\[([A-G][#b]?[^\]]*|pass(?:ing)?:\s*[^\]]+)\]/i.test(line)) {
+        const segments = line.split(/(\[[A-G][#b]?[^\]]*\]|\[pass(?:ing)?:\s*[^\]]+\])/gi);
         return (
           <div key={lineIdx} className="whitespace-pre-wrap leading-7 text-[#141518] text-xs sm:text-sm">
             {segments.map((seg, sIdx) => {
               if (seg.startsWith('[') && seg.endsWith(']')) {
                 const inner = seg.slice(1, -1);
+                const passMatch = inner.match(/^pass(ing)?:\s*(.+)$/i);
+                if (passMatch) {
+                  const passSymbol = passMatch[2].trim();
+                  const isSelected = activeAuditionChord?.symbol === passSymbol;
+                  return (
+                    <button
+                      key={sIdx}
+                      type="button"
+                      onClick={() => handleAuditionChord(passSymbol)}
+                      title={`Passing chord: ${passSymbol} (${passingLevel} level)`}
+                      className={`inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 rounded-full font-mono text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                        isSelected
+                          ? 'bg-amber-600 text-white ring-2 ring-amber-400 scale-105'
+                          : 'bg-amber-100/90 hover:bg-amber-200 text-amber-900 border border-amber-300/80 hover:scale-105'
+                      }`}
+                    >
+                      <span className="text-[9px] uppercase px-1 rounded-full bg-amber-500/25 text-amber-900 font-bold tracking-wider">
+                        pass
+                      </span>
+                      <span>{passSymbol}</span>
+                    </button>
+                  );
+                }
                 if (parseChordToken(inner)) {
                   return (
                     <button
@@ -667,6 +769,179 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
             </button>
           </div>
         </div>
+
+        {/* CONTROL BAR 3: PASSING CHORDS ENGINE (ENABLE / DISABLE & 3 LEVELS) */}
+        <div className="mt-5 pt-5 border-t border-white/10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-amber-300 font-semibold flex items-center gap-1.5">
+                <GitMerge className="w-3.5 h-3.5 text-amber-300" />
+                <span>3. AI Passing Chords Engine (Between Consecutive Chords):</span>
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase transition-colors ${
+                  enablePassingChords
+                    ? 'bg-amber-400 text-[#141518] shadow-xs'
+                    : 'bg-white/10 text-stone-400'
+                }`}
+              >
+                {enablePassingChords ? 'Passing Chords: ACTIVE' : 'Passing Chords: OFF'}
+              </span>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.playClick(enablePassingChords ? 520 : 880);
+                  setEnablePassingChords((prev) => !prev);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold font-mono flex items-center gap-2 transition-all cursor-pointer ${
+                  enablePassingChords
+                    ? 'bg-amber-400 hover:bg-amber-300 text-[#141518] shadow-md ring-2 ring-amber-300/50'
+                    : 'bg-white/10 hover:bg-white/20 text-stone-200 border border-white/10'
+                }`}
+                title="Toggle Passing Chords ON/OFF"
+              >
+                {enablePassingChords ? (
+                  <>
+                    <ToggleRight className="w-4 h-4 text-[#141518]" />
+                    <span>Disable Passing Chords</span>
+                  </>
+                ) : (
+                  <>
+                    <ToggleLeft className="w-4 h-4 text-stone-300" />
+                    <span>Enable Passing Chords</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 3-Level Passing Chords Selector Tabs */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* LEVEL 1: BASIC PASSING */}
+            <button
+              type="button"
+              disabled={!enablePassingChords}
+              onClick={() => {
+                soundEngine.playClick(620);
+                setPassingLevel('basic');
+              }}
+              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+                !enablePassingChords
+                  ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5 text-stone-400'
+                  : passingLevel === 'basic'
+                  ? 'bg-amber-500/20 border-amber-400 text-white shadow-md ring-1 ring-amber-300'
+                  : 'bg-white/5 border-white/10 text-stone-200 hover:bg-white/10 cursor-pointer'
+              }`}
+            >
+              <div
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold font-mono ${
+                  passingLevel === 'basic' && enablePassingChords
+                    ? 'bg-amber-400 text-[#141518]'
+                    : 'bg-white/10 text-stone-300'
+                }`}
+              >
+                L1
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold">Basic: Stepwise &amp; Slash Bass</span>
+                  {passingLevel === 'basic' && enablePassingChords && (
+                    <span className="px-1.5 py-0.2 rounded bg-amber-400 text-[#141518] text-[9px] font-bold uppercase">
+                      ON
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-stone-300 mt-0.5 leading-tight">
+                  Smooth stepwise bass lines &amp; 1st-inversions (e.g. C → <strong className="text-amber-300">G/B</strong> → Am, F → <strong className="text-amber-300">C/E</strong> → Dm, <strong className="text-amber-300">C#dim</strong>).
+                </p>
+              </div>
+            </button>
+
+            {/* LEVEL 2: INTERMEDIATE PASSING */}
+            <button
+              type="button"
+              disabled={!enablePassingChords}
+              onClick={() => {
+                soundEngine.playClick(750);
+                setPassingLevel('intermediate');
+              }}
+              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+                !enablePassingChords
+                  ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5 text-stone-400'
+                  : passingLevel === 'intermediate'
+                  ? 'bg-amber-500/20 border-amber-400 text-white shadow-md ring-1 ring-amber-300'
+                  : 'bg-white/5 border-white/10 text-stone-200 hover:bg-white/10 cursor-pointer'
+              }`}
+            >
+              <div
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold font-mono ${
+                  passingLevel === 'intermediate' && enablePassingChords
+                    ? 'bg-amber-400 text-[#141518]'
+                    : 'bg-white/10 text-stone-300'
+                }`}
+              >
+                L2
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold">Intermediate: Secondary Dominants</span>
+                  {passingLevel === 'intermediate' && enablePassingChords && (
+                    <span className="px-1.5 py-0.2 rounded bg-amber-400 text-[#141518] text-[9px] font-bold uppercase">
+                      ON
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-stone-300 mt-0.5 leading-tight">
+                  Secondary V7/x &amp; diminished 7ths (e.g. C → <strong className="text-amber-300">A7</strong> → Dm, C → <strong className="text-amber-300">E7</strong> → Am, <strong className="text-amber-300">C#°7</strong>).
+                </p>
+              </div>
+            </button>
+
+            {/* LEVEL 3: ADVANCED PASSING */}
+            <button
+              type="button"
+              disabled={!enablePassingChords}
+              onClick={() => {
+                soundEngine.playClick(890);
+                setPassingLevel('advanced');
+              }}
+              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+                !enablePassingChords
+                  ? 'opacity-40 cursor-not-allowed bg-white/5 border-white/5 text-stone-400'
+                  : passingLevel === 'advanced'
+                  ? 'bg-amber-500/20 border-amber-400 text-white shadow-md ring-1 ring-amber-300'
+                  : 'bg-white/5 border-white/10 text-stone-200 hover:bg-white/10 cursor-pointer'
+              }`}
+            >
+              <div
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold font-mono ${
+                  passingLevel === 'advanced' && enablePassingChords
+                    ? 'bg-amber-400 text-[#141518]'
+                    : 'bg-white/10 text-stone-300'
+                }`}
+              >
+                L3
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold">Advanced: Tritone Subs &amp; Neo-Soul</span>
+                  {passingLevel === 'advanced' && enablePassingChords && (
+                    <span className="px-1.5 py-0.2 rounded bg-amber-400 text-[#141518] text-[9px] font-bold uppercase">
+                      ON
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-stone-300 mt-0.5 leading-tight">
+                  subV7 chromatic slips, Altered 7#9 Hendrix chords &amp; gospel transitions (e.g. <strong className="text-amber-300">Eb7</strong> → Dm, <strong className="text-amber-300">Bb7</strong> → Am, <strong className="text-amber-300">E7#9</strong>).
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* MAIN WORKSPACE: Left Input (Paste Lyrics/Chords) + Right Output (Interactive Transposed Sheet) */}
@@ -882,6 +1157,308 @@ export const ChordTransposerTool: React.FC<ChordTransposerToolProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* ===================================================================== */}
+      {/* DEDICATED PASSING CHORDS SECTION: 3 LEVELS & AUDIO AUDITION          */}
+      {/* ===================================================================== */}
+      <div id="passing-chords-studio" className="p-6 sm:p-8 bg-gradient-to-br from-[#fcfbfa] via-[#faf6ef] to-[#f7f2e7] border-t-2 border-[#e6dfd3]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-900 text-[11px] font-mono uppercase tracking-wider font-bold mb-2">
+              <GitMerge className="w-3.5 h-3.5 text-amber-700" />
+              <span>AI Harmonic Bridge • Passing Chords Engine</span>
+            </div>
+            <h3 className="text-xl sm:text-2xl font-serif text-[#141518] font-normal tracking-tight flex items-center gap-2.5 flex-wrap">
+              <span>Song Passing Chords Studio</span>
+              <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-[#141518] text-[#c5a880]">
+                Key of {result.targetKeyName}
+              </span>
+              <span
+                className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                  enablePassingChords
+                    ? 'bg-amber-400 text-stone-900 ring-2 ring-amber-300'
+                    : 'bg-stone-200 text-stone-600'
+                }`}
+              >
+                {enablePassingChords
+                  ? `Active • ${passingLevel.toUpperCase()} Tier`
+                  : 'Disabled (Click Toggle to Enable)'}
+              </span>
+            </h3>
+            <p className="text-xs sm:text-sm text-[#5c5f6a] mt-1 max-w-2xl leading-relaxed">
+              Passing chords create harmonic tension and irresistible forward momentum between consecutive chords in your song. Discover smooth stepwise bass walkdowns, secondary dominants (V7/x), and neo-soul tritone substitutions.
+            </p>
+          </div>
+
+          {/* Toggle Button in Section */}
+          <div className="flex items-center gap-2 self-start md:self-center">
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick(enablePassingChords ? 520 : 880);
+                setEnablePassingChords((prev) => !prev);
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold font-mono flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+                enablePassingChords
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                  : 'bg-[#141518] hover:bg-[#2b2d35] text-[#c5a880]'
+              }`}
+            >
+              {enablePassingChords ? (
+                <>
+                  <ToggleRight className="w-4 h-4 text-white" />
+                  <span>Disable Passing Chords</span>
+                </>
+              ) : (
+                <>
+                  <ToggleLeft className="w-4 h-4 text-[#c5a880]" />
+                  <span>Enable Passing Chords</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {!enablePassingChords ? (
+          /* DISABLED STATE BANNER */
+          <div className="p-6 sm:p-8 rounded-3xl bg-white/90 border-2 border-dashed border-amber-300/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-700">
+                <GitMerge className="w-7 h-7" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-[#141518]">
+                  Passing Chords are currently Disabled
+                </h4>
+                <p className="text-xs text-[#5c5f6a] mt-1 max-w-xl leading-relaxed">
+                  Toggle Passing Chords ON to automatically inject transitional chords between consecutive chords in your song sheet, preview 3-chord cadences on piano, and explore Basic, Intermediate, and Advanced harmonic tiers.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playClick(880);
+                setEnablePassingChords(true);
+              }}
+              className="px-5 py-2.5 rounded-2xl bg-[#141518] hover:bg-[#2b2d35] text-[#c5a880] text-xs font-bold font-mono tracking-wider uppercase transition-all shadow-md hover:scale-105 cursor-pointer shrink-0"
+            >
+              Enable Passing Chords (1-Click)
+            </button>
+          </div>
+        ) : (
+          /* ENABLED STATE: Active Passing Chords Breakdown + Level Switcher + Cadence Audition */
+          <div className="space-y-6">
+            {/* Level Quick Switcher */}
+            <div className="flex items-center justify-between gap-2 flex-wrap bg-white/80 p-2.5 rounded-2xl border border-[#e6dfd3]">
+              <span className="text-xs font-mono font-bold text-[#141518] px-2 flex items-center gap-1.5">
+                <span>Select Passing Complexity:</span>
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(['basic', 'intermediate', 'advanced'] as const).map((lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playClick(lvl === 'advanced' ? 880 : lvl === 'intermediate' ? 760 : 640);
+                      setPassingLevel(lvl);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold capitalize transition-all cursor-pointer ${
+                      passingLevel === lvl
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                    }`}
+                  >
+                    Level {lvl === 'basic' ? '1: Basic' : lvl === 'intermediate' ? '2: Intermediate' : '3: Advanced'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Song Specific Consecutive Transitions Cards */}
+            <div>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <span className="text-xs font-bold font-mono uppercase tracking-wider text-[#141518] flex items-center gap-1.5">
+                  <Play className="w-3.5 h-3.5 text-amber-600 fill-current" />
+                  <span>Consecutive Chord Transitions in Your Song ({result.passingTransitions.length}):</span>
+                </span>
+                <span className="text-[11px] text-[#5c5f6a]">
+                  Click &quot;Play Cadence&quot; to hear Chord 1 → Passing Chord → Chord 2
+                </span>
+              </div>
+
+              {result.passingTransitions.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {result.passingTransitions.map((trans) => {
+                    const isCadencePlaying = playingCadenceId === trans.id;
+                    return (
+                      <div
+                        key={trans.id}
+                        className={`p-4 rounded-2xl border transition-all ${
+                          isCadencePlaying
+                            ? 'bg-amber-50/90 border-amber-400 ring-2 ring-amber-300 shadow-md'
+                            : 'bg-white hover:bg-[#fffdfa] border-[#e6dfd3] hover:border-amber-300 shadow-2xs'
+                        }`}
+                      >
+                        {/* Header: Chord A -> [PASSING] -> Chord B */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+                            <span className="px-2 py-0.5 rounded bg-stone-100 text-[#141518]">
+                              {trans.fromChord}
+                            </span>
+                            <ArrowRight className="w-3 h-3 text-stone-400" />
+                            <span className="px-2 py-0.5 rounded bg-amber-500 text-white shadow-2xs font-extrabold ring-1 ring-amber-400">
+                              {trans.passingChord}
+                            </span>
+                            <ArrowRight className="w-3 h-3 text-stone-400" />
+                            <span className="px-2 py-0.5 rounded bg-stone-100 text-[#141518]">
+                              {trans.toChord}
+                            </span>
+                          </div>
+
+                          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                            {trans.roman}
+                          </span>
+                        </div>
+
+                        {/* Category & Inversion details */}
+                        <div className="mb-2 flex items-center justify-between text-[11px] font-mono text-[#5c5f6a]">
+                          <span className="font-semibold text-amber-800">
+                            {trans.typeLabel}
+                          </span>
+                          <span>
+                            {trans.voicing.activeInversion.inversionName} ({trans.voicing.activeInversion.figuredBass})
+                          </span>
+                        </div>
+
+                        {/* Theory Explanation */}
+                        <p className="text-xs text-[#5c5f6a] leading-relaxed mb-3 bg-[#faf8f5] p-2.5 rounded-xl border border-[#f0ece3]">
+                          {trans.theoryExplanation}
+                        </p>
+
+                        {/* Bottom Actions: Play Cadence & Inspect on Piano */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#f0ece3]">
+                          <button
+                            type="button"
+                            onClick={() => handlePlayCadence(trans)}
+                            disabled={isCadencePlaying}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold font-mono flex items-center gap-1.5 transition-all cursor-pointer ${
+                              isCadencePlaying
+                                ? 'bg-amber-600 text-white animate-pulse'
+                                : 'bg-amber-500 hover:bg-amber-600 text-white shadow-2xs'
+                            }`}
+                            title="Play Chord A -> Passing Chord -> Chord B in smooth tempo"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>{isCadencePlaying ? 'Auditioning...' : 'Play Cadence'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedVoicing(trans.voicing);
+                              setIsSidePopupOpen(true);
+                              soundEngine.playChord(trans.voicing.notes, 1.6, true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-[#141518] text-xs font-mono font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Inspect in Smooth Voice-Leading Side Popup"
+                          >
+                            <Volume2 className="w-3 h-3 text-amber-700" />
+                            <span>Piano Voicing</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 rounded-2xl bg-white border border-[#e6dfd3] text-center text-xs text-[#5c5f6a]">
+                  Enter lyrics and chords with at least two different chords to generate contextual passing chord transitions.
+                </div>
+              )}
+            </div>
+
+            {/* Key Scale Degree Passing Chords Master Reference (all 6 primary degrees in current key) */}
+            <div className="mt-6 pt-5 border-t border-[#e6dfd3]">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <span className="text-xs font-bold font-mono uppercase tracking-wider text-[#141518] flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-[#9e7a4b]" />
+                  <span>Key of {result.targetKeyName} Passing Chords Master Reference (3 Levels):</span>
+                </span>
+                <span className="text-[11px] text-[#5c5f6a]">
+                  Click any passing chord badge below to audition it on piano
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {result.degreeReferences.map((ref, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3.5 rounded-2xl bg-white border border-[#e6dfd3] shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#f0ece3]">
+                      <span className="font-mono text-xs font-bold text-[#141518]">
+                        Approach {ref.degreeLabel}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-[#141518] text-[#c5a880] font-mono text-[11px] font-bold">
+                        Target: {ref.targetChord}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs font-mono">
+                      {/* Basic */}
+                      <div className="flex items-center justify-between gap-1 p-1.5 rounded-lg bg-stone-50 hover:bg-amber-50/60 transition-colors">
+                        <span className="text-[10px] font-semibold text-stone-500 uppercase">
+                          Basic:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAuditionChord(ref.basic.chord)}
+                          className="px-2 py-0.5 rounded bg-white hover:bg-amber-500 hover:text-white border border-stone-200 text-stone-900 font-bold transition-all cursor-pointer shadow-2xs"
+                          title={`${ref.basic.type}: ${ref.basic.explanation}`}
+                        >
+                          {ref.basic.chord}
+                        </button>
+                      </div>
+
+                      {/* Intermediate */}
+                      <div className="flex items-center justify-between gap-1 p-1.5 rounded-lg bg-stone-50 hover:bg-emerald-700 hover:text-white transition-colors group">
+                        <span className="text-[10px] font-semibold text-emerald-700 group-hover:text-white uppercase">
+                          Inter:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAuditionChord(ref.intermediate.chord)}
+                          className="px-2 py-0.5 rounded bg-white hover:bg-emerald-700 hover:text-white border border-emerald-300 text-emerald-900 font-bold transition-all cursor-pointer shadow-2xs"
+                          title={`${ref.intermediate.type}: ${ref.intermediate.explanation}`}
+                        >
+                          {ref.intermediate.chord}
+                        </button>
+                      </div>
+
+                      {/* Advanced */}
+                      <div className="flex items-center justify-between gap-1 p-1.5 rounded-lg bg-stone-50 hover:bg-[#141518] hover:text-[#c5a880] transition-colors group">
+                        <span className="text-[10px] font-semibold text-amber-700 group-hover:text-[#c5a880] uppercase">
+                          Adv:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAuditionChord(ref.advanced.chord)}
+                          className="px-2 py-0.5 rounded bg-white hover:bg-[#141518] hover:text-[#c5a880] border border-amber-300 text-amber-950 font-bold transition-all cursor-pointer shadow-2xs"
+                          title={`${ref.advanced.type}: ${ref.advanced.explanation}`}
+                        >
+                          {ref.advanced.chord}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* BOTTOM PANEL: AI Harmonic Reharmonization Breakdown & Theory Insights */}

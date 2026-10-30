@@ -102,6 +102,33 @@ export interface ReharmonizationInsight {
   figuredBass?: string;
 }
 
+export type PassingChordLevel = 'basic' | 'intermediate' | 'advanced';
+
+export interface PassingChordTransition {
+  id: string;
+  fromChord: string;
+  toChord: string;
+  passingChord: string;
+  level: PassingChordLevel;
+  typeLabel: string;
+  roman: string;
+  voicing: SmoothChordVoicing;
+  theoryExplanation: string;
+  cadenceNotes: {
+    from: string[];
+    passing: string[];
+    to: string[];
+  };
+}
+
+export interface DegreePassingReference {
+  degreeLabel: string;
+  targetChord: string;
+  basic: { chord: string; type: string; explanation: string };
+  intermediate: { chord: string; type: string; explanation: string };
+  advanced: { chord: string; type: string; explanation: string };
+}
+
 export interface TransposedSongResult {
   detectedKeyIndex: number;
   detectedKeyName: string;
@@ -113,6 +140,10 @@ export interface TransposedSongResult {
   uniqueChords: SmoothChordVoicing[];
   songSequence: SmoothChordVoicing[];
   aiInsights: ReharmonizationInsight[];
+  passingChordsEnabled: boolean;
+  passingChordLevel: PassingChordLevel;
+  passingTransitions: PassingChordTransition[];
+  degreeReferences: DegreePassingReference[];
 }
 
 /**
@@ -177,7 +208,8 @@ export function isChordLine(line: string): boolean {
   for (const t of tokens) {
     // Strip parentheses or brackets if someone wrote (G) or [C]
     const stripped = t.replace(/^[([（]+|[)\]）]+$/g, '');
-    if (parseChordToken(stripped)) {
+    const passMatch = stripped.match(/^pass(ing)?:\s*(.+)$/i);
+    if (parseChordToken(stripped) || (passMatch && parseChordToken(passMatch[2]))) {
       chordCount++;
     } else if (/^(x\d+|\d+x|N\.C\.|-|\/|\|)$/i.test(stripped)) {
       // Repeat markers or bar dividers
@@ -738,14 +770,259 @@ export function chordSymbolToNotes(symbol: string): string[] {
 }
 
 /**
+ * 3-Level AI Passing Chord Calculation Engine
+ * Connects any two consecutive chords (fromChord -> toChord) with harmonic bridges:
+ * Level 1 (Basic): Stepwise Diatonic & Inverted Bass Passing Chords (e.g. G/B, C/E, C#dim)
+ * Level 2 (Intermediate): Secondary Dominants & Diminished 7ths (e.g. A7 -> Dm, E7 -> Am, C#dim7)
+ * Level 3 (Advanced / Pro): Tritone Substitutions, Altered Dominants & Gospel / Neo-Soul Slips (e.g. Eb7 -> Dm, Bb7 -> Am, E7#9)
+ */
+export function calculatePassingChord(
+  fromChordSymbol: string,
+  toChordSymbol: string,
+  targetKeyIndex: number,
+  level: PassingChordLevel,
+  preferFlats = false
+): PassingChordTransition | null {
+  const p1 = parseChordToken(fromChordSymbol.replace(/^[([（]+|[)\]）]+$/g, ''));
+  const p2 = parseChordToken(toChordSymbol.replace(/^[([（]+|[)\]）]+$/g, ''));
+  if (!p1 || !p2) return null;
+
+  const r1 = p1.rootIndex;
+  const r2 = p2.rootIndex;
+  const delta = ((r2 - r1) % 12 + 12) % 12;
+
+  let passingSymbol = '';
+  let typeLabel = '';
+  let roman = '';
+  let theoryExplanation = '';
+
+  const toIsMinor = /^m(?!aj)/i.test(p2.quality) || p2.quality.startsWith('min');
+
+  if (level === 'basic') {
+    if (delta === 9 || delta === 8) {
+      // Descending 3 or 4 semitones (e.g. C -> Am [9], F -> Dm [9], G -> Em [9])
+      const vRoot = (r1 + 7) % 12;
+      const bassNote = (r1 + 11) % 12;
+      const vRootName = formatPitchClass(vRoot, preferFlats);
+      const bassName = formatPitchClass(bassNote, preferFlats);
+      passingSymbol = `${vRootName}/${bassName}`;
+      typeLabel = 'Stepwise Descending Bass';
+      roman = `${getRomanNumeral(vRoot, '', targetKeyIndex)}/3`;
+      theoryExplanation = `Stepwise descending bassline (${formatPitchClass(r1, preferFlats)} → ${bassName} → ${formatPitchClass(r2, preferFlats)}). The ${passingSymbol} slash chord connects smoothly down to the relative minor.`;
+    } else if (delta === 5) {
+      // Ascending 4th / 5 semitones (e.g. C -> F, G -> C, D -> G)
+      const bassNote = (r1 + 4) % 12;
+      const r1Name = formatPitchClass(r1, preferFlats);
+      const bassName = formatPitchClass(bassNote, preferFlats);
+      passingSymbol = `${r1Name}/${bassName}`;
+      typeLabel = 'Ascending 1st-Inversion Bass';
+      roman = `${getRomanNumeral(r1, '', targetKeyIndex)}/3`;
+      theoryExplanation = `Smooth ascending 1st-inversion bass (${r1Name} → ${bassName} → ${formatPitchClass(r2, preferFlats)}). Guides the ear cleanly up to the subdominant.`;
+    } else if (delta === 2) {
+      // Whole step up (e.g. C -> Dm, F -> G, G -> Am)
+      const passRoot = (r1 + 1) % 12;
+      const passRootName = formatPitchClass(passRoot, preferFlats);
+      passingSymbol = `${passRootName}dim`;
+      typeLabel = 'Chromatic Passing Diminished';
+      roman = `#${getRomanNumeral(r1, '', targetKeyIndex)}°`;
+      theoryExplanation = `Chromatic passing diminished chord (${formatPitchClass(r1, preferFlats)} → ${passRootName}dim → ${formatPitchClass(r2, preferFlats)}). Bridges the whole-step gap with forward tension.`;
+    } else if (delta === 10) {
+      // Whole step down (e.g. Dm -> C, G -> F, Am -> G)
+      const midBass = (r1 + 11) % 12;
+      const midRoot = (r2 + 7) % 12;
+      const midRootName = formatPitchClass(midRoot, preferFlats);
+      const midBassName = formatPitchClass(midBass, preferFlats);
+      passingSymbol = `${midRootName}/${midBassName}`;
+      typeLabel = 'Stepwise Passing Bass';
+      roman = `${getRomanNumeral(midRoot, '', targetKeyIndex)}/3`;
+      theoryExplanation = `Stepwise descending bass (${formatPitchClass(r1, preferFlats)} → ${midBassName} → ${formatPitchClass(r2, preferFlats)}) for gentle melodic contour.`;
+    } else if (delta === 0) {
+      // Same chord (e.g. C -> C, G -> G)
+      const r1Name = formatPitchClass(r1, preferFlats);
+      passingSymbol = `${r1Name}sus4`;
+      typeLabel = 'Suspended Tension Passing';
+      roman = `${getRomanNumeral(r1, '', targetKeyIndex)}sus4`;
+      theoryExplanation = `Harmonic suspension (${passingSymbol}) creates subtle rhythmic movement before resolving back.`;
+    } else {
+      // Other intervals in Basic: diatonic 5th or slash 3rd
+      const passRoot = (r2 + 7) % 12;
+      const passName = formatPitchClass(passRoot, preferFlats);
+      passingSymbol = passName;
+      typeLabel = 'Diatonic Bridge';
+      roman = getRomanNumeral(passRoot, '', targetKeyIndex);
+      theoryExplanation = `Diatonic passing harmony providing natural bridge from ${fromChordSymbol} to ${toChordSymbol}.`;
+    }
+  } else if (level === 'intermediate') {
+    // LEVEL 2: INTERMEDIATE (Secondary Dominants & Diminished 7ths)
+    const secDomRoot = (r2 + 7) % 12;
+    const secDimRoot = (r2 + 11) % 12;
+
+    if (r1 === secDomRoot) {
+      const dimName = formatPitchClass(secDimRoot, preferFlats);
+      passingSymbol = `${dimName}dim7`;
+      const targetRoman = getRomanNumeral(r2, p2.quality, targetKeyIndex);
+      typeLabel = `Secondary Diminished 7th (vii°7)`;
+      roman = `vii°7/${targetRoman}`;
+      theoryExplanation = `Secondary leading-tone diminished 7th (${passingSymbol}) resolving up a half-step into ${toChordSymbol}.`;
+    } else {
+      const domName = formatPitchClass(secDomRoot, preferFlats);
+      passingSymbol = `${domName}7`;
+      const targetRoman = getRomanNumeral(r2, p2.quality, targetKeyIndex);
+      typeLabel = `Secondary Dominant (V7/${targetRoman})`;
+      roman = `V7/${targetRoman}`;
+      theoryExplanation = `Secondary Dominant (${passingSymbol} = V7/${targetRoman}). Introduces a chromatic leading tone that pulls strongly into ${toChordSymbol}.`;
+    }
+  } else {
+    // LEVEL 3: ADVANCED / PRO (Tritone Substitutions, Altered Dominants & Gospel / Neo-Soul Slips)
+    const subVRoot = (r2 + 1) % 12;
+    const subVName = formatPitchClass(subVRoot, preferFlats);
+
+    if (toIsMinor) {
+      const secDomRoot = (r2 + 7) % 12;
+      const secDomName = formatPitchClass(secDomRoot, preferFlats);
+      if (delta === 9 || delta === 2) {
+        passingSymbol = `${subVName}7`;
+        const targetRoman = getRomanNumeral(r2, p2.quality, targetKeyIndex);
+        typeLabel = `Tritone Substitution (subV7/${targetRoman})`;
+        roman = `subV7/${targetRoman}`;
+        theoryExplanation = `Tritone Substitution (${passingSymbol} → ${toChordSymbol}). Approaching the target from one half-step above allows all voices to slide chromatically in neo-soul style.`;
+      } else {
+        passingSymbol = `${secDomName}7#9`;
+        const targetRoman = getRomanNumeral(r2, p2.quality, targetKeyIndex);
+        typeLabel = `Altered Dominant (V7#9/${targetRoman})`;
+        roman = `V7#9/${targetRoman}`;
+        theoryExplanation = `Altered Dominant "Purple" Chord (${passingSymbol} = V7#9/${targetRoman}). Combines major 3rd and sharp 9th for punchy gospel/jazz dissonance.`;
+      }
+    } else {
+      passingSymbol = `${subVName}9`;
+      const targetRoman = getRomanNumeral(r2, p2.quality, targetKeyIndex);
+      typeLabel = `Tritone Substitution (subV9/${targetRoman})`;
+      roman = `subV9/${targetRoman}`;
+      theoryExplanation = `Tritone Substitution (${passingSymbol} = subV9/${targetRoman}). Chromatic half-step downward descent (${subVName} → ${formatPitchClass(r2, preferFlats)}) for sophisticated jazz cadence.`;
+    }
+  }
+
+  const voicing = buildSmoothChordVoicing(passingSymbol, roman, targetKeyIndex, preferFlats);
+  const fromVoicing = buildSmoothChordVoicing(fromChordSymbol, '', targetKeyIndex, preferFlats);
+  const toVoicing = buildSmoothChordVoicing(toChordSymbol, '', targetKeyIndex, preferFlats);
+
+  return {
+    id: `${fromChordSymbol}->${passingSymbol}->${toChordSymbol}`,
+    fromChord: fromChordSymbol,
+    toChord: toChordSymbol,
+    passingChord: passingSymbol,
+    level,
+    typeLabel,
+    roman,
+    voicing,
+    theoryExplanation,
+    cadenceNotes: {
+      from: fromVoicing.notes,
+      passing: voicing.notes,
+      to: toVoicing.notes,
+    },
+  };
+}
+
+/**
+ * Scale Degree Passing Chords Master Reference (all 6 primary degrees in any key)
+ */
+export function getDegreePassingChords(
+  targetKeyIndex: number,
+  preferFlats = false
+): DegreePassingReference[] {
+  const scaleOffsets = [
+    { degree: 'I', semitone: 0, quality: '', label: 'Tonic' },
+    { degree: 'ii', semitone: 2, quality: 'm', label: 'Supertonic' },
+    { degree: 'iii', semitone: 4, quality: 'm', label: 'Mediant' },
+    { degree: 'IV', semitone: 5, quality: '', label: 'Subdominant' },
+    { degree: 'V', semitone: 7, quality: '', label: 'Dominant' },
+    { degree: 'vi', semitone: 9, quality: 'm', label: 'Submediant' },
+  ];
+
+  return scaleOffsets.map((deg) => {
+    const targetRoot = (targetKeyIndex + deg.semitone) % 12;
+    const targetName = formatPitchClass(targetRoot, preferFlats);
+    const targetSymbol = `${targetName}${deg.quality}`;
+
+    // Basic
+    let basicChord = '';
+    let basicType = '';
+    let basicExpl = '';
+
+    if (deg.quality === 'm') {
+      const slashBass = (targetRoot + 11) % 12;
+      const vRoot = (targetRoot + 7) % 12;
+      basicChord = `${formatPitchClass(vRoot, preferFlats)}/${formatPitchClass(slashBass, preferFlats)}`;
+      basicType = 'Stepwise Slash Bass (V/3)';
+      basicExpl = `Smooth descending bassline stepping directly into the ${targetSymbol} minor root.`;
+    } else if (deg.degree === 'IV') {
+      const tonicRoot = targetKeyIndex;
+      const third = (tonicRoot + 4) % 12;
+      basicChord = `${formatPitchClass(tonicRoot, preferFlats)}/${formatPitchClass(third, preferFlats)}`;
+      basicType = 'Ascending 1st Inversion (I/3)';
+      basicExpl = `1st-inversion tonic puts the 3rd in the bass, stepping straight up into the IV chord.`;
+    } else if (deg.degree === 'V') {
+      const chromPass = (targetRoot - 1 + 12) % 12;
+      basicChord = `${formatPitchClass(chromPass, preferFlats)}dim`;
+      basicType = 'Chromatic Passing (#IV°)';
+      basicExpl = `Chromatic diminished triad creates strong forward tension leading into the V chord.`;
+    } else {
+      const slashBass = (targetKeyIndex + 11) % 12;
+      const vRoot = (targetKeyIndex + 7) % 12;
+      basicChord = `${formatPitchClass(vRoot, preferFlats)}/${formatPitchClass(slashBass, preferFlats)}`;
+      basicType = 'Stepwise Leading-Tone Bass';
+      basicExpl = `Leading tone in the bass resolves smoothly by half-step up into the tonic.`;
+    }
+
+    // Intermediate: Secondary Dominant (V7/target)
+    const secDomRoot = (targetRoot + 7) % 12;
+    const secDomName = formatPitchClass(secDomRoot, preferFlats);
+    const interChord = `${secDomName}7`;
+    const interType = `Secondary Dominant (V7/${deg.degree})`;
+    const interExpl = `Dominant 7th of ${targetSymbol} creates powerful harmonic pull with chromatic voice leading.`;
+
+    // Advanced: Tritone Substitution or Altered Dominant
+    const subVRoot = (targetRoot + 1) % 12;
+    const subVName = formatPitchClass(subVRoot, preferFlats);
+    let advChord = '';
+    let advType = '';
+    let advExpl = '';
+
+    if (deg.quality === 'm') {
+      advChord = `${secDomName}7#9`;
+      advType = `Altered Dominant (V7#9/${deg.degree})`;
+      advExpl = `Iconic gospel/jazz "purple" chord with altered sharp 9th resolving into minor.`;
+    } else {
+      advChord = `${subVName}9`;
+      advType = `Tritone Substitution (subV9/${deg.degree})`;
+      advExpl = `Approaches ${targetSymbol} from a half-step above, gliding downward in silky neo-soul voice-leading.`;
+    }
+
+    return {
+      degreeLabel: `${deg.degree} (${targetSymbol}) — ${deg.label}`,
+      targetChord: targetSymbol,
+      basic: { chord: basicChord, type: basicType, explanation: basicExpl },
+      intermediate: { chord: interChord, type: interType, explanation: interExpl },
+      advanced: { chord: advChord, type: advType, explanation: advExpl },
+    };
+  });
+}
+
+/**
  * Main Engine: Transpose & Reharmonize an entire song sheet (lyrics + chords)
  * Preserves exact lyric column alignment for Chords-Over-Lyrics and Inline [Chord] sheets.
+ * Optionally inserts 3-level AI Passing Chords between consecutive chords.
  */
 export function transposeAndReharmonizeSong(
   inputText: string,
   targetKeyIndex: number | null,
   level: ReharmonizeLevel,
-  forceEnharmonic?: 'sharp' | 'flat' | 'auto'
+  forceEnharmonic?: 'sharp' | 'flat' | 'auto',
+  options?: {
+    enablePassingChords?: boolean;
+    passingChordLevel?: PassingChordLevel;
+  }
 ): TransposedSongResult {
   const detected = detectKeyFromText(inputText);
   const actualTargetKey = targetKeyIndex !== null ? ((targetKeyIndex % 12) + 12) % 12 : detected.keyIndex;
@@ -761,9 +1038,13 @@ export function transposeAndReharmonizeSong(
 
   const targetKeyName = formatPitchClass(actualTargetKey, preferFlats);
 
+  const enablePassingChords = options?.enablePassingChords ?? false;
+  const passingChordLevel: PassingChordLevel = options?.passingChordLevel ?? 'intermediate';
+
   const uniqueChordMap = new Map<string, SmoothChordVoicing>();
   const songSequence: SmoothChordVoicing[] = [];
   const insightsMap = new Map<string, ReharmonizationInsight>();
+  const passingTransitionsMap = new Map<string, PassingChordTransition>();
   let chordCounter = 0;
 
   const transformSingleChordToken = (rawToken: string): string => {
@@ -828,24 +1109,148 @@ export function transposeAndReharmonizeSong(
   // Process line by line
   const lines = inputText.split('\n');
   const outputLines = lines.map((line) => {
-    // 1. Replace inline bracketed chords like [C] or [G/B] (excluding section headers like [Chorus])
-    let processedLine = line.replace(/\[([A-G][#b]?[^\]]*)\]/g, (fullMatch, inner) => {
-      if (parseChordToken(inner)) {
-        return `[${transformSingleChordToken(inner)}]`;
-      }
-      return fullMatch;
-    });
+    // 1. Check if line has inline bracketed chords like [C] or [G/B]
+    const hasBrackets = /\[([A-G][#b]?[^\]]*)\]/.test(line) &&
+      !/^\[(verse|chorus|bridge|intro|outro|pre-chorus|interlude|solo|hook|tag|inst)/i.test(line.trim());
 
-    // 2. If the line is a Chord-Over-Lyric line, replace each chord token while preserving spacing
-    if (isChordLine(processedLine)) {
-      processedLine = processedLine.replace(/(\S+)/g, (token) => {
-        if (token === '|' || token === '/' || token === '-') return token;
-        return transformSingleChordToken(token);
+    if (hasBrackets) {
+      // First pass: transpose existing bracket chords
+      const bracketChordsInLine: string[] = [];
+      let processedLine = line.replace(/\[([A-G][#b]?[^\]]*)\]/g, (fullMatch, inner) => {
+        if (parseChordToken(inner)) {
+          const transformed = transformSingleChordToken(inner);
+          bracketChordsInLine.push(transformed);
+          return `[${transformed}]`;
+        }
+        return fullMatch;
       });
+
+      // If passing chords enabled and line has 2+ chords, insert passing chords between them
+      if (enablePassingChords && bracketChordsInLine.length >= 2) {
+        for (let i = 0; i < bracketChordsInLine.length - 1; i++) {
+          const cA = bracketChordsInLine[i];
+          const cB = bracketChordsInLine[i + 1];
+          const pass = calculatePassingChord(cA, cB, actualTargetKey, passingChordLevel, preferFlats);
+          if (pass) {
+            passingTransitionsMap.set(pass.id, pass);
+            if (!uniqueChordMap.has(pass.passingChord)) {
+              uniqueChordMap.set(pass.passingChord, pass.voicing);
+            }
+            // Insert `[pass: ${pass.passingChord}] ` right before `[${cB}]`
+            const targetStr = `[${cB}]`;
+            const idx = processedLine.indexOf(targetStr);
+            if (idx !== -1) {
+              const passMarker = `[pass: ${pass.passingChord}] `;
+              processedLine =
+                processedLine.slice(0, idx) + passMarker + processedLine.slice(idx);
+            }
+          }
+        }
+      }
+
+      return processedLine;
     }
 
-    return processedLine;
+    // 2. If the line is a Chord-Over-Lyric line
+    if (isChordLine(line)) {
+      // Extract tokens with positions
+      const tokenRegex = /(\S+)/g;
+      const tokens: { raw: string; start: number; end: number }[] = [];
+      let match: RegExpExecArray | null;
+      while ((match = tokenRegex.exec(line)) !== null) {
+        tokens.push({ raw: match[0], start: match.index, end: match.index + match[0].length });
+      }
+
+      if (tokens.length === 0) return line;
+
+      // Transform all chord tokens
+      const transformedTokens = tokens.map((t) => {
+        if (t.raw === '|' || t.raw === '/' || t.raw === '-') {
+          return { ...t, transformed: t.raw, isChord: false };
+        }
+        const trans = transformSingleChordToken(t.raw);
+        return { ...t, transformed: trans, isChord: true };
+      });
+
+      // If passing chords disabled, reconstruct with original spacing
+      if (!enablePassingChords || transformedTokens.filter((t) => t.isChord).length < 2) {
+        let resultLine = '';
+        let lastPos = 0;
+        for (const t of transformedTokens) {
+          resultLine += line.slice(lastPos, t.start) + t.transformed;
+          lastPos = t.end;
+        }
+        resultLine += line.slice(lastPos);
+        return resultLine;
+      }
+
+      // If passing chords enabled: insert passing chords in gaps between chords
+      let resultLine = '';
+      let lastPos = 0;
+
+      for (let i = 0; i < transformedTokens.length; i++) {
+        const current = transformedTokens[i];
+        resultLine += line.slice(lastPos, current.start) + current.transformed;
+        lastPos = current.end;
+
+        // Check if next token is also a chord
+        if (i < transformedTokens.length - 1 && current.isChord) {
+          const next = transformedTokens[i + 1];
+          if (next.isChord) {
+            const pass = calculatePassingChord(
+              current.transformed,
+              next.transformed,
+              actualTargetKey,
+              passingChordLevel,
+              preferFlats
+            );
+
+            if (pass) {
+              passingTransitionsMap.set(pass.id, pass);
+              if (!uniqueChordMap.has(pass.passingChord)) {
+                uniqueChordMap.set(pass.passingChord, pass.voicing);
+              }
+
+              const passToken = `[pass: ${pass.passingChord}]`;
+              const gap = line.slice(current.end, next.start);
+
+              if (gap.length >= passToken.length + 2) {
+                const padBefore = Math.floor((gap.length - passToken.length) / 2);
+                const padAfter = Math.max(1, gap.length - passToken.length - padBefore);
+                resultLine += ' '.repeat(padBefore) + passToken + ' '.repeat(padAfter);
+                lastPos = next.start;
+              } else {
+                resultLine += ' ' + passToken + ' ';
+              }
+            }
+          }
+        }
+      }
+
+      resultLine += line.slice(lastPos);
+      return resultLine;
+    }
+
+    return line;
   });
+
+  // Also collect transitions from the entire song sequence (across line breaks)
+  for (let i = 0; i < songSequence.length - 1; i++) {
+    const sA = songSequence[i].symbol;
+    const sB = songSequence[i + 1].symbol;
+    if (sA !== sB) {
+      const pass = calculatePassingChord(sA, sB, actualTargetKey, passingChordLevel, preferFlats);
+      if (pass && !passingTransitionsMap.has(pass.id)) {
+        passingTransitionsMap.set(pass.id, pass);
+        if (enablePassingChords && !uniqueChordMap.has(pass.passingChord)) {
+          uniqueChordMap.set(pass.passingChord, pass.voicing);
+        }
+      }
+    }
+  }
+
+  // Pre-generate the 6-degree reference table for the current key
+  const degreeReferences = getDegreePassingChords(actualTargetKey, preferFlats);
 
   return {
     detectedKeyIndex: detected.keyIndex,
@@ -858,6 +1263,10 @@ export function transposeAndReharmonizeSong(
     uniqueChords: Array.from(uniqueChordMap.values()),
     songSequence,
     aiInsights: Array.from(insightsMap.values()),
+    passingChordsEnabled: enablePassingChords,
+    passingChordLevel,
+    passingTransitions: Array.from(passingTransitionsMap.values()),
+    degreeReferences,
   };
 }
 
