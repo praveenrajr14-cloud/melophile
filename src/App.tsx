@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomePage } from './components/pages/HomePage';
@@ -81,6 +85,33 @@ export const App: React.FC = () => {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  // Native Mobile Device Lifecycle (Android & iOS)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      // Dark luxury status bar matching theme
+      StatusBar.setBackgroundColor({ color: '#141518' }).catch(() => {});
+      StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+      SplashScreen.hide().catch(() => {});
+
+      // Android Hardware Back Button handling
+      const backListener = CapApp.addListener('backButton', () => {
+        if (isModalOpen) {
+          setIsModalOpen(false);
+        } else if (isCloudModalOpen) {
+          setIsCloudModalOpen(false);
+        } else if (currentTab !== 'home') {
+          setCurrentTab('home');
+        } else {
+          CapApp.exitApp();
+        }
+      });
+
+      return () => {
+        backListener.then((handle) => handle.remove()).catch(() => {});
+      };
+    }
+  }, [isModalOpen, isCloudModalOpen, currentTab]);
 
   const handleOpenTrial = (courseName?: string) => {
     if (courseName) {
